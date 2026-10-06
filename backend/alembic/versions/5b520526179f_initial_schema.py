@@ -162,9 +162,24 @@ CREATE UNIQUE INDEX documents_dedup_uq ON documents (deal_id, sha256)
 -- value — ARCHITECTURE's CHECK constraint had it as a 5th status, which
 -- would make it mutually exclusive with being done/in_progress/etc.
 -- instead of layering on top of one of them as PRD actually describes.
+-- sequence_number/key: PRD F8 shows a per-deal display key like "KRSN-12"
+-- (short_code + sequence); not in ARCHITECTURE's DDL at all. Stored as an
+-- integer, not the formatted string, so it survives a deal rename —
+-- routers/tasks.py formats "{deal.short_code}-{sequence_number}".
+-- assigned_by: PRD F8 distinguishes "reporter" (= created_by, below) from
+-- "assigned by" (whoever most recently performed the assignment — the
+-- direct assigner, or the requester of an approved reassignment). Missing
+-- from ARCHITECTURE's DDL, which only had created_by.
+-- start_date: PRD F8 lists it as a field ("start date (optional), due
+-- date (must not be before start date)"); also missing.
+-- deleted: PRD F8 ("Approved deletions soft-delete the task") and PRD
+-- Goal G5 ("no hard deletes from the app") both require a soft-delete
+-- flag — ARCHITECTURE.md §3.7's side-effect table says task_delete does a
+-- hard delete, which directly contradicts the PRD's own explicit goal.
 CREATE TABLE tasks (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     deal_id         UUID NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+    sequence_number INTEGER NOT NULL,
     title           TEXT NOT NULL,
     description     TEXT,
     status          TEXT NOT NULL DEFAULT 'not_started'
@@ -175,10 +190,17 @@ CREATE TABLE tasks (
     priority        TEXT NOT NULL DEFAULT 'medium'
                     CHECK (priority IN ('low','medium','high')),
     assigned_to     UUID REFERENCES users(id),
+    assigned_by     UUID REFERENCES users(id),
+    start_date      DATE,
     due_date        DATE,
+    deleted         BOOLEAN NOT NULL DEFAULT FALSE,
     created_by      UUID NOT NULL REFERENCES users(id),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT tasks_deal_sequence_uq UNIQUE (deal_id, sequence_number),
+    CONSTRAINT tasks_dates_check CHECK (
+        start_date IS NULL OR due_date IS NULL OR due_date >= start_date
+    )
 );
 CREATE INDEX tasks_deal_idx ON tasks(deal_id);
 CREATE INDEX tasks_assigned_idx ON tasks(assigned_to);
@@ -193,6 +215,9 @@ CREATE TABLE task_attachments (
 );
 
 -- COMMENTS
+-- deleted: PRD F8 ("can delete (shows 'Comment removed')") needs a
+-- soft-delete flag so the placeholder can render — not in ARCHITECTURE's
+-- original DDL, which had no way to delete a comment at all.
 CREATE TABLE comments (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     deal_id         UUID NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
@@ -201,6 +226,7 @@ CREATE TABLE comments (
     author_id       UUID NOT NULL REFERENCES users(id),
     body            TEXT NOT NULL,
     edited          BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted         BOOLEAN NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -225,6 +251,12 @@ CREATE TABLE approval_requests (
     task_id         UUID REFERENCES tasks(id) ON DELETE CASCADE,
     proposed_assignee UUID REFERENCES users(id),
     requested_by    UUID NOT NULL REFERENCES users(id),
+    -- The requester's own note (DESIGN.md's approvals queue mockup shows
+    -- one per row, e.g. "Signed copy received from borrower") — distinct
+    -- from review_note below, which the *reviewer* writes at decision
+    -- time. Missing from ARCHITECTURE's original DDL, which only had the
+    -- reviewer-side field.
+    requester_note  TEXT,
     reviewed_by     UUID REFERENCES users(id),
     review_note     TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -281,9 +313,13 @@ BEGIN
 END;
 $$;
 
+-- approval_requests is deliberately excluded — ARCHITECTURE's original
+-- trigger loop included it, but the table was never given an updated_at
+-- column (it tracks reviewed_at instead), so the trigger fails on every
+-- update with "record new has no field updated_at".
 DO $$ DECLARE t TEXT;
 BEGIN
-    FOREACH t IN ARRAY ARRAY['users','deals','documents','tasks','comments','approval_requests'] LOOP
+    FOREACH t IN ARRAY ARRAY['users','deals','documents','tasks','comments'] LOOP
         EXECUTE format(
             'CREATE TRIGGER trg_%%s_updated_at BEFORE UPDATE ON %%s
              FOR EACH ROW EXECUTE FUNCTION set_updated_at()', t, t);

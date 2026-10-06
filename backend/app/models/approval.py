@@ -44,6 +44,7 @@ class ApprovalRequest(Base):
     )
 
     requested_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    requester_note: Mapped[str | None]
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     review_note: Mapped[str | None]
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))

@@ -175,7 +175,14 @@ async def request_delete(
         raise HTTPException(status_code=409, detail="A deletion request is already pending")
 
     doc.status = "delete_requested"
-    db.add(ApprovalRequest(type="document_delete", document_id=doc.id, requested_by=user.id))
+    db.add(
+        ApprovalRequest(
+            type="document_delete",
+            document_id=doc.id,
+            requested_by=user.id,
+            requester_note=body.reason,
+        )
+    )
     db.add(
         AuditLog(
             actor_id=user.id,

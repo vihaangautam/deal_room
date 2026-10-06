@@ -29,13 +29,17 @@ class Task(Base):
     deal_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("deals.id", ondelete="CASCADE")
     )
+    sequence_number: Mapped[int]
     title: Mapped[str]
     description: Mapped[str | None]
     status: Mapped[str] = mapped_column(server_default="not_started")
     needs_attention: Mapped[bool] = mapped_column(server_default=text("false"))
     priority: Mapped[str] = mapped_column(server_default="medium")
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    assigned_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
+    start_date: Mapped[date | None]
     due_date: Mapped[date | None]
+    deleted: Mapped[bool] = mapped_column(server_default=text("false"))
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
     updated_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
