@@ -74,14 +74,22 @@ CREATE TABLE user_folder_permissions (
 );
 
 -- DEALS
+-- short_code, summary, allow_uploads_when_closed are not in
+-- ARCHITECTURE.md's original DDL. PRD §5/F2/F3 require a unique 2-6
+-- letter short_code and a <=280-char summary at creation (ARCHITECTURE's
+-- "notes" column matched neither name nor the length rule, so it's
+-- replaced rather than kept alongside a redundant field); F3 requires
+-- the allow_uploads_when_closed per-deal override flag.
 CREATE TABLE deals (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name          TEXT NOT NULL,
+    short_code    TEXT NOT NULL UNIQUE CHECK (short_code ~ '^[A-Z]{2,6}$'),
     borrower      TEXT NOT NULL,
+    summary       TEXT NOT NULL CHECK (char_length(summary) <= 280),
     stage         TEXT NOT NULL DEFAULT 'new'
                   CHECK (stage IN ('new','running','successful','dropped')),
     amount_cr     NUMERIC(12,2),
-    notes         TEXT,
+    allow_uploads_when_closed BOOLEAN NOT NULL DEFAULT FALSE,
     created_by    UUID NOT NULL REFERENCES users(id),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -90,18 +98,26 @@ CREATE INDEX deals_stage_idx ON deals(stage);
 CREATE INDEX deals_created_at_idx ON deals(created_at DESC);
 
 -- DEAL STAGE HISTORY (append-only)
+-- reason is NOT NULL with a 5-1000 char check — PRD F3 requires a reason
+-- on every transition, not only Dropped (DESIGN.md §5.10 flags this
+-- explicitly: ARCHITECTURE's original nullable reason undersold it).
 CREATE TABLE deal_stage_history (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     deal_id       UUID NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
     from_stage    TEXT,
     to_stage      TEXT NOT NULL,
     changed_by    UUID NOT NULL REFERENCES users(id),
-    reason        TEXT,
+    reason        TEXT NOT NULL CHECK (char_length(reason) BETWEEN 5 AND 1000),
     changed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX deal_stage_history_deal_idx ON deal_stage_history(deal_id, changed_at DESC);
 
 -- DOCUMENTS
+-- status uses 'archived', not ARCHITECTURE's original 'deleted' — PRD §8's
+-- own document status state machine and PRD's Archive glossary entry both
+-- use 'archived' as the terminal status for an approved deletion, and
+-- DESIGN.md's status-pill table (§3.1) lists 'archived' too, never
+-- 'deleted'. ARCHITECTURE.md §2.1 is the one outlier among the four docs.
 CREATE TABLE documents (
     id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     deal_id          UUID NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
@@ -115,7 +131,7 @@ CREATE TABLE documents (
     status           TEXT NOT NULL DEFAULT 'uploading'
                      CHECK (status IN (
                        'uploading', 'pending', 'active',
-                       'delete_requested', 'deleted', 'rejected'
+                       'delete_requested', 'archived', 'rejected'
                      )),
     version          INTEGER NOT NULL DEFAULT 1,
     uploaded_by      UUID NOT NULL REFERENCES users(id),
@@ -131,16 +147,26 @@ CREATE UNIQUE INDEX documents_dedup_uq ON documents (deal_id, sha256)
     WHERE status IN ('uploading','pending','active','delete_requested');
 
 -- TASKS
+-- status values are 'not_started'/'submitted', not ARCHITECTURE's original
+-- 'todo'/'awaiting_approval' — DESIGN.md §3.1 explicitly warns against
+-- exactly those two strings ("Do not invent todo or awaiting_approval as
+-- values"), and PRD F8's own prose names the real ones: "Not started ->
+-- In progress -> Done, plus Awaiting approval (submitted)". needs_attention
+-- is a separate boolean flag per that same PRD sentence ("Boolean flag
+-- needs_attention set when an attachment is rejected"), not a status
+-- value — ARCHITECTURE's CHECK constraint had it as a 5th status, which
+-- would make it mutually exclusive with being done/in_progress/etc.
+-- instead of layering on top of one of them as PRD actually describes.
 CREATE TABLE tasks (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     deal_id         UUID NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
     title           TEXT NOT NULL,
     description     TEXT,
-    status          TEXT NOT NULL DEFAULT 'todo'
+    status          TEXT NOT NULL DEFAULT 'not_started'
                     CHECK (status IN (
-                      'todo', 'in_progress', 'awaiting_approval',
-                      'done', 'needs_attention'
+                      'not_started', 'in_progress', 'submitted', 'done'
                     )),
+    needs_attention BOOLEAN NOT NULL DEFAULT FALSE,
     priority        TEXT NOT NULL DEFAULT 'medium'
                     CHECK (priority IN ('low','medium','high')),
     assigned_to     UUID REFERENCES users(id),
@@ -184,8 +210,12 @@ CREATE TABLE approval_requests (
                       'document_upload', 'document_delete',
                       'task_reassign', 'task_delete'
                     )),
+    -- 'cancelled' (requester withdraws) and 'superseded' (target changed
+    -- underneath it, e.g. task deleted) are in PRD §8's own approval
+    -- request state machine but missing from ARCHITECTURE's original
+    -- CHECK constraint.
     status          TEXT NOT NULL DEFAULT 'pending'
-                    CHECK (status IN ('pending','approved','rejected')),
+                    CHECK (status IN ('pending','approved','rejected','cancelled','superseded')),
     document_id     UUID REFERENCES documents(id) ON DELETE CASCADE,
     task_id         UUID REFERENCES tasks(id) ON DELETE CASCADE,
     proposed_assignee UUID REFERENCES users(id),

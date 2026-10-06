@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 APPROVAL_TYPES = ("document_upload", "document_delete", "task_reassign", "task_delete")
-APPROVAL_STATUSES = ("pending", "approved", "rejected")
+APPROVAL_STATUSES = ("pending", "approved", "rejected", "cancelled", "superseded")
 
 
 class ApprovalRequest(Base):

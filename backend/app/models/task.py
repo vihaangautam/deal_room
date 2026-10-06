@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
-TASK_STATUSES = ("todo", "in_progress", "awaiting_approval", "done", "needs_attention")
+TASK_STATUSES = ("not_started", "in_progress", "submitted", "done")
 TASK_PRIORITIES = ("low", "medium", "high")
 
 
@@ -31,7 +31,8 @@ class Task(Base):
     )
     title: Mapped[str]
     description: Mapped[str | None]
-    status: Mapped[str] = mapped_column(server_default="todo")
+    status: Mapped[str] = mapped_column(server_default="not_started")
+    needs_attention: Mapped[bool] = mapped_column(server_default=text("false"))
     priority: Mapped[str] = mapped_column(server_default="medium")
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     due_date: Mapped[date | None]

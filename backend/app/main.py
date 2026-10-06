@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
-from app.routers import auth
+from app.routers import auth, deals, folders
 
 app = FastAPI(title="Lilkis Deal Room API")
 
@@ -17,6 +17,8 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(deals.router)
+app.include_router(folders.router)
 
 
 @app.get("/health")

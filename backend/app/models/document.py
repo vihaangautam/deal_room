@@ -12,7 +12,7 @@ DOCUMENT_STATUSES = (
     "pending",
     "active",
     "delete_requested",
-    "deleted",
+    "archived",
     "rejected",
 )
 

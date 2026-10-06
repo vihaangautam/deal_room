@@ -2,9 +2,10 @@
 
 Matches PRD §11's demo cast exactly: Samir (admin, approver), Rohan
 (Contribute everywhere except Borrower details = None), Meera (View
-everywhere, Contribute on Bank documents). Deals/tasks are seeded
-separately once their routers exist (Phase 1 steps 4+) — this script only
-needs what auth and folder permissions depend on: users and folders.
+everywhere, Contribute on Bank documents), and four deals — one per
+stage — each with a stage-history reason, per §11's "four seeded deals:
+New, Running, Successful, Dropped — each with reasons in its stage
+history." Deal names match the ones already shown in the uiux/ mockups.
 
 Seeded users skip the forced-password-change flow (must_change_password
 set False directly) so the demo isn't gated behind a change-password
@@ -17,6 +18,7 @@ import asyncio
 from sqlalchemy import select
 
 from app.database import async_session_factory
+from app.models.deal import Deal, DealStageHistory
 from app.models.folder import FolderTemplate, UserFolderPermission
 from app.models.user import User
 
@@ -90,9 +92,90 @@ async def seed() -> None:
                 )
             )
         db.add_all(permissions)
+        await db.flush()
+
+        # New: no history row (a deal starts at New with nothing to
+        # record yet — see routers/deals.py create_deal).
+        patel = Deal(
+            name="Patel Textiles Ltd",
+            short_code="PTXL",
+            borrower="Patel Textiles Pvt Ltd",
+            summary="Last-mile funding against finished-goods inventory",
+            created_by=samir.id,
+        )
+        # Running: one transition, New -> Running.
+        sharma = Deal(
+            name="Sharma Infra Ltd",
+            short_code="SHRM",
+            borrower="Sharma & Co Infra",
+            summary="Interim finance against receivables",
+            stage="running",
+            created_by=samir.id,
+        )
+        # Successful: New -> Running -> Successful.
+        mehta = Deal(
+            name="Mehta Logistics",
+            short_code="MEHT",
+            borrower="Mehta Logistics Pvt Ltd",
+            summary="ARC co-investment, secured facility",
+            stage="successful",
+            created_by=samir.id,
+        )
+        # Dropped: New -> Running -> Dropped.
+        oberoi = Deal(
+            name="Oberoi Textiles",
+            short_code="OBRT",
+            borrower="Oberoi Textiles LLP",
+            summary="IBC interim finance, under evaluation",
+            stage="dropped",
+            created_by=samir.id,
+        )
+        db.add_all([patel, sharma, mehta, oberoi])
+        await db.flush()
+
+        db.add_all(
+            [
+                DealStageHistory(
+                    deal_id=sharma.id,
+                    from_stage="new",
+                    to_stage="running",
+                    changed_by=samir.id,
+                    reason="Term sheet signed, work begins",
+                ),
+                DealStageHistory(
+                    deal_id=mehta.id,
+                    from_stage="new",
+                    to_stage="running",
+                    changed_by=samir.id,
+                    reason="Term sheet signed, work begins",
+                ),
+                DealStageHistory(
+                    deal_id=mehta.id,
+                    from_stage="running",
+                    to_stage="successful",
+                    changed_by=samir.id,
+                    reason="Facility fully repaid, security released",
+                ),
+                DealStageHistory(
+                    deal_id=oberoi.id,
+                    from_stage="new",
+                    to_stage="running",
+                    changed_by=samir.id,
+                    reason="Term sheet signed, work begins",
+                ),
+                DealStageHistory(
+                    deal_id=oberoi.id,
+                    from_stage="running",
+                    to_stage="dropped",
+                    changed_by=samir.id,
+                    reason="Borrower withdrew application",
+                ),
+            ]
+        )
 
         await db.commit()
         print("Seeded: samir@lilkis.in, rohan@lilkis.in, meera@lilkis.in (password: changeme123)")
+        print("Seeded deals: PTXL (new), SHRM (running), MEHT (successful), OBRT (dropped)")
 
 
 if __name__ == "__main__":
