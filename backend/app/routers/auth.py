@@ -61,6 +61,12 @@ async def login(
     # Skip authenticate() entirely when locked — no point hashing/verifying
     # a password for an account we're about to reject regardless.
     user = None if locked else await user_manager.authenticate(credentials)
+    # fastapi-users' authenticate() (this version) checks the password but
+    # not is_active — that's only enforced later, on current_active_user,
+    # i.e. on requests *after* login. PRD F1 needs login itself to fail
+    # for a deactivated user ("cannot log in again"), so check here too.
+    if user is not None and not user.is_active:
+        user = None
 
     if user is None or locked:
         db.add(
