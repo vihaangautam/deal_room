@@ -1,0 +1,50 @@
+# Local development only. Postgres + S3Mock (S3-compatible, stands in for
+# OCI Object Storage per ARCHITECTURE.md §17 — swap endpoint_url for the
+# Phase 3 cutover, no code changes). No cloudflared, no real OCI here.
+#
+# MinIO's Docker Hub images now require a paid subscription to pull, so we
+# use adobe/s3mock instead (freely pullable, same boto3/S3 API surface,
+# used widely for S3 integration testing).
+#
+# Run: docker compose up -d
+# Backend and frontend run on the host (uvicorn --reload / pnpm dev), not
+# in containers, for fast local iteration.
+
+services:
+  postgres:
+    image: postgres:16-bookworm
+    container_name: lilkis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lilkis_admin
+      POSTGRES_PASSWORD: localdevpassword
+      POSTGRES_DB: lilkis
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lilkis_admin -d lilkis"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # S3Mock stores to an in-container temp dir and does not persist across
+  # restarts. Fine for local dev — storage.py creates the bucket idempotently
+  # on backend startup (try create_bucket, ignore BucketAlreadyOwnedByYou),
+  # which is also the correct pattern against real OCI in Phase 3.
+  s3mock:
+    image: adobe/s3mock:latest
+    container_name: lilkis-s3mock
+    restart: unless-stopped
+    ports:
+      - "9000:9090"   # S3 API (mapped to the conventional 9000 on the host)
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9090/favicon.ico"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pg_data:
+    driver: local
