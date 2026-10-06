@@ -21,15 +21,17 @@ from app.schemas.user import ChangePasswordRequest, UserMe
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Only /auth/logout from fastapi-users' own router — its /login doesn't
-# support the lockout + identical-error-message requirements in PRD F1, so
-# login is fully custom below. Filtering routes rather than mounting the
-# whole router avoids registering two competing POST /auth/login handlers.
-_library_auth_router = fastapi_users.get_auth_router(auth_backend)
-router.routes.extend(r for r in _library_auth_router.routes if r.path.endswith("/logout"))
-
 FAILED_LOGIN_WINDOW = timedelta(minutes=15)
 FAILED_LOGIN_THRESHOLD = 5
+
+
+@router.post("/logout")
+async def logout(
+    user_token: tuple[User, str] = Depends(fastapi_users.authenticator.current_user_token(active=True)),
+    strategy: DatabaseStrategy = Depends(get_database_strategy),
+) -> None:
+    user, token = user_token
+    await auth_backend.logout(strategy, user, token)
 
 
 @router.post("/login")

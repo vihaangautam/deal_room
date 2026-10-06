@@ -43,6 +43,7 @@ class Document(Base):
     object_key: Mapped[str] = mapped_column(unique=True)
     status: Mapped[str] = mapped_column(server_default="uploading")
     version: Mapped[int] = mapped_column(server_default="1")
+    integrity_check_failed: Mapped[bool] = mapped_column(server_default=text("false"))
     uploaded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     approved_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     approved_at: Mapped[datetime | None]

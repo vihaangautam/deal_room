@@ -134,6 +134,11 @@ CREATE TABLE documents (
                        'delete_requested', 'archived', 'rejected'
                      )),
     version          INTEGER NOT NULL DEFAULT 1,
+    -- PRD §10: a server-side hash mismatch routes to the approval queue
+    -- flagged, not an automatic rejection (CLAUDE.md non-negotiable #7 —
+    -- the system flags, humans decide). Approvers can only reject a
+    -- flagged document, never approve it; enforced in routers/approvals.py.
+    integrity_check_failed BOOLEAN NOT NULL DEFAULT FALSE,
     uploaded_by      UUID NOT NULL REFERENCES users(id),
     approved_by      UUID REFERENCES users(id),
     approved_at      TIMESTAMPTZ,

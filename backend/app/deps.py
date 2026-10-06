@@ -63,3 +63,19 @@ async def check_folder_access(
         raise HTTPException(status_code=403, detail="Access denied")
     if level == "contribute" and permission == "view":
         raise HTTPException(status_code=403, detail="Access denied")
+
+
+async def accessible_folder_ids(db: AsyncSession, user: User) -> list[UUID] | None:
+    """None means "every folder" (admin). Otherwise only folders with a
+    non-'none' access_level row. Shared by any list/count query that must
+    filter by what the viewer can see — deals.py's document counts and
+    documents.py's list both use this."""
+    if user.role == "admin":
+        return None
+    result = await db.scalars(
+        select(UserFolderPermission.folder_id).where(
+            UserFolderPermission.user_id == user.id,
+            UserFolderPermission.access_level != "none",
+        )
+    )
+    return list(result)

@@ -5,11 +5,10 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.deps import require_admin, require_password_set
+from app.deps import accessible_folder_ids, require_admin, require_password_set
 from app.models.audit import AuditLog
 from app.models.deal import Deal, DealStageHistory
 from app.models.document import Document
-from app.models.folder import UserFolderPermission
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.deal import (
@@ -33,21 +32,6 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
 }
 
 
-async def _accessible_folder_ids(db: AsyncSession, user: User) -> list[uuid.UUID] | None:
-    """None means "every folder" (admin). Otherwise only folders with a
-    non-'none' access_level row — matches ARCHITECTURE.md §2.2's
-    resolution order."""
-    if user.role == "admin":
-        return None
-    result = await db.scalars(
-        select(UserFolderPermission.folder_id).where(
-            UserFolderPermission.user_id == user.id,
-            UserFolderPermission.access_level != "none",
-        )
-    )
-    return list(result)
-
-
 @router.get("", response_model=list[DealListItem])
 async def list_deals(
     stage: str | None = None,
@@ -55,14 +39,14 @@ async def list_deals(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_password_set),
 ) -> list[DealListItem]:
-    accessible_folder_ids = await _accessible_folder_ids(db, user)
+    folder_ids = await accessible_folder_ids(db, user)
 
     doc_count_filters = [Document.status == "active"]
-    if accessible_folder_ids is not None:
+    if folder_ids is not None:
         # Empty list is correct, not a bug: a member with no folder access
         # at all should see zero documents, and folder_id.in_([]) matches
         # nothing, which is exactly that.
-        doc_count_filters.append(Document.folder_id.in_(accessible_folder_ids))
+        doc_count_filters.append(Document.folder_id.in_(folder_ids))
 
     doc_counts = (
         select(Document.deal_id, func.count(Document.id).label("cnt"))

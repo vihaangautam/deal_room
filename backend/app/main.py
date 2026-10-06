@@ -4,9 +4,15 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
-from app.routers import auth, deals, folders
+from app.routers import auth, deals, documents, folders, upload
+from app.storage import ensure_bucket
 
 app = FastAPI(title="Lilkis Deal Room API")
+
+
+@app.on_event("startup")
+async def on_startup() -> None:
+    ensure_bucket()
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,6 +25,8 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(deals.router)
 app.include_router(folders.router)
+app.include_router(upload.router)
+app.include_router(documents.router)
 
 
 @app.get("/health")
