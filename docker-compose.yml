@@ -20,7 +20,10 @@ services:
       POSTGRES_PASSWORD: localdevpassword
       POSTGRES_DB: lilkis
     ports:
-      - "5432:5432"
+      # 5433, not 5432 — this machine already has a native Windows Postgres
+      # service bound to 5432, which silently shadows Docker's forwarded
+      # port for 127.0.0.1 connections and answers with a different user/db.
+      - "5433:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
