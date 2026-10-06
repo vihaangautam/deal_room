@@ -60,6 +60,14 @@ def put_object(key: str, body: bytes, content_type: str) -> None:
     app_client.put_object(Bucket=settings.oci_bucket, Key=key, Body=body, ContentType=content_type)
 
 
+def delete_object(key: str) -> None:
+    """Admin key only — PRD F10 purge. The app key has no delete
+    permission against real OCI (ARCHITECTURE.md §9); S3Mock doesn't
+    enforce that distinction, but admin_client keeps the code shape
+    correct for the cutover."""
+    admin_client.delete_object(Bucket=settings.oci_bucket, Key=key)
+
+
 def presigned_download_url(key: str, filename: str, expires_in: int = 600) -> str:
     """ARCHITECTURE.md §5 / CLAUDE.md §10: never exceed 10 minutes."""
     return app_client.generate_presigned_url(
