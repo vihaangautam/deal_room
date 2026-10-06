@@ -37,6 +37,9 @@ CREATE TABLE users (
                   CHECK (role IN ('admin','member')),
     can_approve   BOOLEAN NOT NULL DEFAULT FALSE,
     is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Not in ARCHITECTURE.md's original DDL; added for PRD F1's forced
+    -- password-change-on-first-login requirement.
+    must_change_password BOOLEAN NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

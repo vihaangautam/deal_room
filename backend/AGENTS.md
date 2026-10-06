@@ -34,7 +34,16 @@ just the CREATE TABLE statements).
 ```
 pip install -e ".[dev]"
 alembic upgrade head
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --port 8002
 procrastinate --app=app.jobs.app worker
 pytest -x -v
 ```
+Port 8002, not 8000 — a stale Windows socket handle on this dev machine
+permanently shadows 8000 after any ungraceful process kill, and the same
+thing happened on 8001. VITE_API_URL in .env already points at 8002.
+
+No `--reload`: WatchFiles' reloader subprocess model triggers the same
+ghost-listener issue on this machine (the owning PID reports as a live
+LISTENer but no longer exists). Restart uvicorn manually after changes
+instead — annoying but reliable. If a later Python/WatchFiles version or
+a venv rebuild fixes it, --reload is safe to bring back.
