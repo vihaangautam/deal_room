@@ -53,6 +53,9 @@ class TaskListItem(BaseModel):
     due_date: date | None
     deal_id: uuid.UUID
     deal_name: str | None = None  # populated only for the cross-deal My Tasks view
+    # DESIGN.md §6.6 shows Done tasks from the last 14 days only, and this
+    # is the closest thing to "when it was finished" on the row.
+    updated_at: datetime
 
 
 class TaskAttachmentItem(BaseModel):

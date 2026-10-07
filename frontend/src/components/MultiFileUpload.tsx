@@ -25,7 +25,17 @@ function Row({ item, onRetry }: { item: UploadItem; onRetry: () => void }) {
         <p className="truncate text-table font-medium text-text-primary">{item.file.name}</p>
         <div className="flex items-center gap-2">
           {item.status === "uploading" && (
-            <div className="h-1 w-32 overflow-hidden rounded-full bg-[#EEF0EE]">
+            // DESIGN.md §8: "Upload rows use role=progressbar with
+            // aria-valuenow" — a bare div told a screen reader nothing
+            // about how far along a 2 GB file was.
+            <div
+              role="progressbar"
+              aria-valuenow={item.progress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`Uploading ${item.file.name}`}
+              className="h-1 w-32 overflow-hidden rounded-full bg-[#EEF0EE]"
+            >
               <div
                 className="h-full bg-brand-600 transition-all"
                 style={{ width: `${item.progress}%` }}
@@ -153,7 +163,10 @@ export function MultiFileUploadDialog({
         </div>
 
         {items.length > 0 && (
-          <div className="max-h-80 overflow-y-auto rounded-md border border-border">
+          <div
+            aria-live="polite"
+            className="max-h-80 overflow-y-auto rounded-md border border-border"
+          >
             {items.map((item) => (
               <Row key={item.id} item={item} onRetry={() => retry(item.id)} />
             ))}

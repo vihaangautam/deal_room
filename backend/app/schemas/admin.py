@@ -30,8 +30,6 @@ class UserUpdate(BaseModel):
 
 
 class UserRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     display_name: str
     email: str
@@ -39,6 +37,11 @@ class UserRead(BaseModel):
     can_approve: bool
     is_active: bool
     created_at: datetime
+    # DESIGN.md §6.9's Last login column. Read from the audit log rather
+    # than kept on the row: auth.login_succeeded is already written on
+    # every sign-in, and a users.last_login_at column would be a second
+    # copy of the same fact that could drift from it.
+    last_login_at: datetime | None = None
 
 
 class ResetPasswordResponse(BaseModel):

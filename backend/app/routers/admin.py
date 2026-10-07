@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,8 +43,31 @@ def _generate_temp_password() -> str:
 @router.get("/users", response_model=list[UserRead])
 async def list_users(
     db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)
-) -> list[User]:
-    return list(await db.scalars(select(User).order_by(User.display_name)))
+) -> list[UserRead]:
+    last_login = (
+        select(AuditLog.actor_id, func.max(AuditLog.created_at).label("at"))
+        .where(AuditLog.action == "auth.login_succeeded")
+        .group_by(AuditLog.actor_id)
+        .subquery()
+    )
+    rows = await db.execute(
+        select(User, last_login.c.at)
+        .outerjoin(last_login, last_login.c.actor_id == User.id)
+        .order_by(User.display_name)
+    )
+    return [
+        UserRead(
+            id=user.id,
+            display_name=user.display_name,
+            email=user.email,
+            role=user.role,
+            can_approve=user.can_approve,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            last_login_at=at,
+        )
+        for user, at in rows
+    ]
 
 
 @router.post("/users", response_model=UserCreateResponse, status_code=201)

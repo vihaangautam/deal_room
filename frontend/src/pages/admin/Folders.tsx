@@ -15,7 +15,7 @@ import { Field } from "@/components/ui/field"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { toast } from "@/components/ui/toast"
-import { cn } from "@/lib/utils"
+import { cn, formatDate } from "@/lib/utils"
 import type { Folder } from "@/api/types"
 
 function AddFolderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
@@ -171,6 +171,12 @@ function FolderRow({
           <span className="text-table font-medium text-text-primary">{folder.name}</span>
         )}
       </td>
+      <td className="px-4 text-right tabular-nums text-table text-text-secondary">
+        {folder.file_count}
+      </td>
+      <td className="px-4 text-right tabular-nums text-table text-text-tertiary">
+        {folder.created_at ? formatDate(folder.created_at) : "—"}
+      </td>
       <td className="w-10 px-2">
         <RowMenu>
           <RowMenuItem onSelect={() => setRenaming(true)}>Rename</RowMenuItem>
@@ -283,8 +289,7 @@ export function Folders() {
       />
       <div className="px-6 py-6">
       <p className="mb-4 text-table text-text-tertiary">
-        Folders appear in every deal, in this order. Drag a row to reorder them. Changes apply
-        everywhere immediately.
+        Folders appear in every deal. Changes apply everywhere immediately.
       </p>
 
       <div className="rounded-md border border-border">
@@ -293,13 +298,15 @@ export function Folders() {
             <tr className="h-9 bg-surface-sunken text-left text-label text-text-tertiary">
               <th className="w-8 px-2" />
               <th className="px-4 font-medium">Name</th>
+              <th className="px-4 text-right font-medium">Files across deals</th>
+              <th className="px-4 text-right font-medium">Created</th>
               <th className="w-10 px-2" />
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr className="h-10 border-t border-border">
-                <td colSpan={3} className="px-4">
+                <td colSpan={5} className="px-4">
                   <div className="h-3 w-1/3 animate-pulse rounded bg-surface-sunken" />
                 </td>
               </tr>

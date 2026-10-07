@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,6 +10,11 @@ class FolderRead(BaseModel):
     id: uuid.UUID
     name: str
     display_order: int
+    # DESIGN.md §6.8's table columns. file_count is every status that
+    # blocks deletion (PRD F4), so the number an admin reads is the same
+    # number the delete error would quote back at them.
+    file_count: int = 0
+    created_at: datetime | None = None
 
 
 class FolderCreate(BaseModel):

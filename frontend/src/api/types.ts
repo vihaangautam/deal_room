@@ -48,6 +48,9 @@ export interface Folder {
   id: string
   name: string
   display_order: number
+  /** Files across every deal, counting the statuses that block deletion. */
+  file_count: number
+  created_at: string | null
 }
 
 export type AccessLevel = "none" | "view" | "contribute"
@@ -86,6 +89,7 @@ export interface TaskListItem {
   due_date: string | null
   deal_id: string
   deal_name?: string
+  updated_at: string
 }
 
 export interface TaskDetail {
@@ -159,6 +163,7 @@ export interface UserAdmin {
   can_approve: boolean
   is_active: boolean
   created_at: string
+  last_login_at: string | null
 }
 
 export interface PermissionMatrixEntry {

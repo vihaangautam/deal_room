@@ -99,6 +99,7 @@ async def list_tasks(
             reporter_name=reporter_name,
             due_date=task.due_date,
             deal_id=task.deal_id,
+            updated_at=task.updated_at,
         )
         for task, reporter_name, assignee_name in rows
     ]
@@ -130,6 +131,7 @@ async def my_tasks(
             reporter_name=reporter_name,
             due_date=task.due_date,
             deal_id=task.deal_id,
+            updated_at=task.updated_at,
             deal_name=deal_name,
         )
         for task, short_code, deal_name, reporter_name, assignee_name in rows

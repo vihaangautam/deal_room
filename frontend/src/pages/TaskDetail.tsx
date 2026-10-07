@@ -10,6 +10,7 @@ import {
   useTask,
   useUpdateTask,
 } from "@/api/tasks"
+import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { CommentThread } from "@/components/CommentThread"
 import { useDeal } from "@/api/deals"
 import { useDocuments } from "@/api/documents"
@@ -54,6 +55,7 @@ export function TaskDetail() {
   const { data: documents } = useDocuments(dealId)
   const { data: folders } = useFolders()
   const { data: myPermissions } = useMyPermissions()
+  useDocumentTitle(task ? `${task.key} ${task.title}` : undefined)
   const updateTask = useUpdateTask(dealId ?? "", taskId ?? "")
   const assignTask = useAssignTask(dealId ?? "", taskId ?? "")
   const changeStatus = useChangeTaskStatus(dealId ?? "", taskId ?? "")

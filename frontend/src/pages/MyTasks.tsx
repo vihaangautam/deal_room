@@ -1,7 +1,9 @@
+import { useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { ChevronDown, ChevronRight } from "lucide-react"
 import { useMyTasks } from "@/api/tasks"
 import { TaskStatusPill, NeedsAttentionPill } from "@/components/StatusPill"
-import { formatDate } from "@/lib/utils"
+import { cn, formatDate } from "@/lib/utils"
 import { PageHeader } from "@/components/PageHeader"
 import type { TaskListItem, TaskStatus } from "@/api/types"
 
@@ -19,9 +21,15 @@ function isOverdue(task: TaskListItem): boolean {
   return new Date(task.due_date) < new Date(new Date().toDateString())
 }
 
+// DESIGN.md §6.6: the Done group shows the last 14 days and starts
+// collapsed. Without the window a long-running deal buries the three
+// groups that still need work under months of finished ones.
+const DONE_WINDOW_DAYS = 14
+
 export function MyTasks() {
   const navigate = useNavigate()
   const { data: tasks, isLoading } = useMyTasks()
+  const [doneOpen, setDoneOpen] = useState(false)
 
   if (isLoading) return null
 
@@ -48,8 +56,13 @@ export function MyTasks() {
 
       <div className="flex flex-col gap-6">
         {GROUP_ORDER.map((status) => {
+          const doneCutoff = Date.now() - DONE_WINDOW_DAYS * 24 * 60 * 60 * 1000
           const group = tasks
             .filter((t) => t.status === status)
+            .filter(
+              (t) =>
+                status !== "done" || new Date(t.updated_at).getTime() >= doneCutoff,
+            )
             .sort((a, b) => {
               if (!a.due_date) return 1
               if (!b.due_date) return -1
@@ -59,11 +72,22 @@ export function MyTasks() {
 
           return (
             <section key={status}>
-              <div className="mb-1 flex h-8 items-center gap-2 rounded-md bg-surface-sunken px-3">
+              <button
+                type="button"
+                onClick={() => status === "done" && setDoneOpen((v) => !v)}
+                aria-expanded={status === "done" ? doneOpen : undefined}
+                className="mb-1 flex h-8 w-full items-center gap-2 rounded-md bg-surface-sunken px-3 text-left"
+              >
+                {status === "done" &&
+                  (doneOpen ? (
+                    <ChevronDown className="h-3.5 w-3.5 text-text-tertiary" aria-hidden />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 text-text-tertiary" aria-hidden />
+                  ))}
                 <span className="text-label text-text-tertiary">{GROUP_LABEL[status]}</span>
                 <span className="text-meta text-text-tertiary">{group.length}</span>
-              </div>
-              <div className="rounded-md border border-border">
+              </button>
+              <div className={cn("rounded-md border border-border", status === "done" && !doneOpen && "hidden")}>
                 {group.map((task) => {
                   const overdue = isOverdue(task)
                   return (

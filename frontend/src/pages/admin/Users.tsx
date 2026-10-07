@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Field } from "@/components/ui/field"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
+import { cn, formatDateTime } from "@/lib/utils"
 import type { AccessLevel, UserAdmin } from "@/api/types"
 
 const ACCESS_LEVELS: AccessLevel[] = ["none", "view", "contribute"]
@@ -117,6 +117,9 @@ function UserRow({ user }: { user: UserAdmin }) {
       <td className="px-4 text-table capitalize text-text-secondary">{user.role}</td>
       <td className="px-4 text-table text-text-secondary">{user.can_approve ? "Yes" : "No"}</td>
       <td className="px-4 text-table text-text-secondary">{user.is_active ? "Active" : "Deactivated"}</td>
+      <td className="px-4 text-table text-text-tertiary">
+        {user.last_login_at ? formatDateTime(user.last_login_at) : "Never"}
+      </td>
       <td className="w-10 px-2">
         <RowMenu>
           <RowMenuItem
@@ -144,15 +147,11 @@ function UserRow({ user }: { user: UserAdmin }) {
   )
 }
 
-function UsersTab() {
+function UsersTab({ addOpen, setAddOpen }: { addOpen: boolean; setAddOpen: (v: boolean) => void }) {
   const { data: users, isLoading } = useAdminUsers()
-  const [addOpen, setAddOpen] = useState(false)
 
   return (
     <div>
-      <div className="mb-4 flex justify-end">
-        <Button onClick={() => setAddOpen(true)}>Add user</Button>
-      </div>
       <div className="rounded-md border border-border">
         <table className="w-full">
           <thead>
@@ -162,13 +161,14 @@ function UsersTab() {
               <th className="px-4 font-medium">Role</th>
               <th className="px-4 font-medium">Can approve</th>
               <th className="px-4 font-medium">Status</th>
+              <th className="px-4 font-medium">Last login</th>
               <th className="w-10 px-2" />
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr className="h-10 border-t border-border">
-                <td colSpan={6} className="px-4">
+                <td colSpan={7} className="px-4">
                   <div className="h-3 w-1/3 animate-pulse rounded bg-surface-sunken" />
                 </td>
               </tr>
@@ -268,10 +268,16 @@ function PermissionMatrixTab() {
 
 export function Users() {
   const [tab, setTab] = useState<"users" | "permissions">("users")
+  const [addOpen, setAddOpen] = useState(false)
 
   return (
     <>
-      <PageHeader title="Users & permissions" />
+      <PageHeader
+        title="Users & permissions"
+        actions={
+          tab === "users" && <Button onClick={() => setAddOpen(true)}>Add user</Button>
+        }
+      />
       <div className="px-6 py-6">
       <div className="mb-4 flex h-9 items-center gap-6 border-b border-border">
         {(["users", "permissions"] as const).map((t) => (
@@ -288,7 +294,11 @@ export function Users() {
           </button>
         ))}
       </div>
-      {tab === "users" ? <UsersTab /> : <PermissionMatrixTab />}
+      {tab === "users" ? (
+        <UsersTab addOpen={addOpen} setAddOpen={setAddOpen} />
+      ) : (
+        <PermissionMatrixTab />
+      )}
       </div>
     </>
   )
