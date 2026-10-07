@@ -37,7 +37,7 @@ const TASK_STATUS_TONE: Record<string, PillTone> = {
   done: "success",
 }
 
-const DEAL_STAGE_LABEL: Record<string, string> = {
+export const DEAL_STAGE_LABEL: Record<string, string> = {
   new: "New",
   running: "Running",
   successful: "Successful",

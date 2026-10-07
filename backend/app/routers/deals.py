@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit_query import audit_query, to_audit_item
 from app.database import get_db
 from app.deps import accessible_folder_ids, require_admin, require_password_set
 from app.models.audit import AuditLog
@@ -11,6 +12,7 @@ from app.models.deal import Deal, DealStageHistory
 from app.models.document import Document
 from app.models.task import Task
 from app.models.user import User
+from app.schemas.admin import AuditLogItem
 from app.schemas.deal import (
     DealCreate,
     DealDetail,
@@ -187,6 +189,24 @@ async def get_stage_history(
         .order_by(DealStageHistory.changed_at.desc())
     )
     return list(result)
+
+
+@router.get("/{deal_id}/activity", response_model=list[AuditLogItem])
+async def get_deal_activity(
+    deal_id: uuid.UUID,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> list[AuditLogItem]:
+    """The History half of DESIGN.md §6.3's Activity tab.
+
+    Admin-only, because PRD §7's permission matrix gives "View Archive /
+    Activity" to admin alone. The Comments half of the same tab is open to
+    everyone — the matrix grants "Create task, comment" to every role — so
+    the tab itself is not gated, only this.
+    """
+    rows = await db.execute(audit_query(deal_id=deal_id, limit=limit))
+    return [to_audit_item(*row) for row in rows]
 
 
 @router.post("/{deal_id}/stage", response_model=DealDetail)

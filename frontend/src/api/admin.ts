@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiFetch } from "./client"
+import { toast } from "@/components/ui/toast"
 import type { ArchiveItem, AuditLogItem, PermissionMatrixEntry, UserAdmin } from "./types"
 
 export function useAdminUsers() {
@@ -66,7 +67,10 @@ export function useSetPermission() {
         method: "PUT",
         body: { access_level: accessLevel },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "permissions"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "permissions"] })
+      toast("Access updated.")
+    },
   })
 }
 
@@ -86,6 +90,7 @@ export function useRestoreDocument() {
       qc.invalidateQueries({ queryKey: ["admin", "archive"] })
       // The file reappears in its deal's document list.
       qc.invalidateQueries({ queryKey: ["documents"] })
+      toast("File restored to its folder.")
     },
   })
 }
@@ -98,18 +103,44 @@ export function usePurgeDocument() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "archive"] })
       qc.invalidateQueries({ queryKey: ["documents"] })
+      // No Undo on this one — DESIGN.md §5.13 calls it "destructive and
+      // final", and the object really is gone.
+      toast("File deleted permanently.")
     },
   })
 }
 
-export function useAuditLog(filters?: { entityType?: string; actorId?: string }) {
+export interface AuditFilters {
+  dealId?: string
+  actorId?: string
+  action?: string
+  since?: string
+  until?: string
+  limit?: number
+}
+
+export function useAuditActions() {
+  return useQuery({
+    queryKey: ["admin", "audit-actions"],
+    queryFn: () => apiFetch<string[]>("/admin/audit-log/actions"),
+  })
+}
+
+export function useAuditLog(filters?: AuditFilters) {
   const query = new URLSearchParams()
-  if (filters?.entityType) query.set("entity_type", filters.entityType)
+  if (filters?.dealId) query.set("deal_id", filters.dealId)
+  if (filters?.action) query.set("action", filters.action)
+  if (filters?.since) query.set("since", filters.since)
+  if (filters?.until) query.set("until", filters.until)
   if (filters?.actorId) query.set("actor_id", filters.actorId)
+  if (filters?.limit) query.set("limit", String(filters.limit))
   const qs = query.toString()
 
   return useQuery({
-    queryKey: ["admin", "audit-log", filters?.entityType, filters?.actorId],
+    // The whole filter set, not a couple of its fields: keying on part
+    // of it hands back the previous filter's rows from cache, which looks
+    // exactly like the filters not working.
+    queryKey: ["admin", "audit-log", qs],
     queryFn: () => apiFetch<AuditLogItem[]>(`/admin/audit-log${qs ? `?${qs}` : ""}`),
   })
 }

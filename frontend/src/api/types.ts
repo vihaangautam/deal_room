@@ -184,9 +184,12 @@ export interface ArchiveItem {
 export interface AuditLogItem {
   id: number
   actor_id: string | null
+  actor_name: string | null
   action: string
   entity_type: string
   entity_id: string
   detail: unknown
+  deal_id: string | null
+  deal_name: string | null
   created_at: string
 }

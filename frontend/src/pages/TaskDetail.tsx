@@ -10,7 +10,7 @@ import {
   useTask,
   useUpdateTask,
 } from "@/api/tasks"
-import { useCreateTaskComment, useDeleteComment, useEditComment, useTaskComments } from "@/api/comments"
+import { CommentThread } from "@/components/CommentThread"
 import { useDeal } from "@/api/deals"
 import { useDocuments } from "@/api/documents"
 import { useUsers } from "@/api/users"
@@ -20,8 +20,6 @@ import { Button } from "@/components/ui/button"
 import { Menu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { formatDate, formatDateTime, initials } from "@/lib/utils"
 import type { TaskAttachmentItem } from "@/api/types"
-
-const EDIT_WINDOW_MS = 15 * 60 * 1000
 
 function AttachmentRow({ attachment }: { attachment: TaskAttachmentItem }) {
   if (attachment.restricted) {
@@ -38,146 +36,6 @@ function AttachmentRow({ attachment }: { attachment: TaskAttachmentItem }) {
       <span className="text-table text-text-primary">{attachment.display_name}</span>
       <span className="text-meta text-text-tertiary">{attachment.folder_name}</span>
       {attachment.status && <DocumentStatusPill status={attachment.status} />}
-    </div>
-  )
-}
-
-function CommentThread({
-  dealId,
-  taskId,
-  readOnly,
-}: {
-  dealId: string
-  taskId: string
-  readOnly: boolean
-}) {
-  const user = useAuthStore((s) => s.user)
-  const { data: comments } = useTaskComments(dealId, taskId)
-  const createComment = useCreateTaskComment(dealId, taskId)
-  const editComment = useEditComment(taskId)
-  const deleteComment = useDeleteComment(taskId)
-  const [body, setBody] = useState("")
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editBody, setEditBody] = useState("")
-
-  function submit() {
-    if (body.trim()) {
-      createComment.mutate({ body: body.trim() })
-      setBody("")
-    }
-  }
-
-  const topLevel = (comments ?? []).filter((c) => !c.parent_id)
-  const repliesFor = (parentId: string) => (comments ?? []).filter((c) => c.parent_id === parentId)
-
-  function canEdit(authorId: string, createdAt: string): boolean {
-    return authorId === user?.id && Date.now() - new Date(createdAt).getTime() < EDIT_WINDOW_MS
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      {!readOnly && (
-        <>
-          <div className="flex gap-2">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pill-neutral-bg text-[11px] font-semibold">
-              {user ? initials(user.display_name) : ""}
-            </span>
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit()
-              }}
-              placeholder="Add a comment"
-              className="h-16 flex-1 rounded-md border border-border bg-surface-sunken p-2 text-body focus:outline-none focus:ring-2 focus:ring-brand-600"
-            />
-          </div>
-          <Button size="sm" className="self-end" onClick={submit} loading={createComment.isPending}>
-            Comment
-          </Button>
-        </>
-      )}
-
-      {topLevel.map((c) => (
-        <div key={c.id} className="flex flex-col gap-2">
-          <div className="flex gap-2">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pill-neutral-bg text-[11px] font-semibold">
-              {initials(c.author_name)}
-            </span>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-body-strong text-text-primary">{c.author_name}</span>
-                <span className="text-meta text-text-tertiary">{formatDateTime(c.created_at)}</span>
-              </div>
-              {editingId === c.id ? (
-                <div className="mt-1 flex flex-col gap-1">
-                  <textarea
-                    value={editBody}
-                    onChange={(e) => setEditBody(e.target.value)}
-                    className="h-16 rounded-md border border-border bg-surface-sunken p-2 text-body"
-                  />
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        editComment.mutate({ commentId: c.id, body: editBody })
-                        setEditingId(null)
-                      }}
-                    >
-                      Save
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <p className={c.deleted ? "italic text-text-tertiary" : "text-body text-text-primary"}>
-                  {c.body}
-                </p>
-              )}
-              {!readOnly && !c.deleted && canEdit(c.author_id, c.created_at) && editingId !== c.id && (
-                <div className="mt-1 flex gap-2 text-meta text-text-tertiary">
-                  <button
-                    type="button"
-                    className="hover:text-text-secondary"
-                    onClick={() => {
-                      setEditingId(c.id)
-                      setEditBody(c.body)
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="hover:text-text-secondary"
-                    onClick={() => deleteComment.mutate(c.id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {repliesFor(c.id).map((reply) => (
-            <div key={reply.id} className="ml-8 flex gap-2">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pill-neutral-bg text-[11px] font-semibold">
-                {initials(reply.author_name)}
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-body-strong text-text-primary">{reply.author_name}</span>
-                  <span className="text-meta text-text-tertiary">{formatDateTime(reply.created_at)}</span>
-                </div>
-                <p className={reply.deleted ? "italic text-text-tertiary" : "text-body text-text-primary"}>
-                  {reply.body}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      ))}
     </div>
   )
 }

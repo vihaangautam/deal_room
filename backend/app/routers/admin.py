@@ -1,11 +1,13 @@
 import secrets
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit_query import audit_query, to_audit_item
 from app.database import get_db
 from app.deps import require_admin
 from app.models.approval import ApprovalRequest
@@ -326,21 +328,42 @@ async def purge_document(
 
 @router.get("/audit-log", response_model=list[AuditLogItem])
 async def get_audit_log(
+    deal_id: uuid.UUID | None = None,
     entity_type: str | None = None,
     entity_id: str | None = None,
     actor_id: uuid.UUID | None = None,
+    action: str | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
-) -> list[AuditLog]:
-    query = select(AuditLog).order_by(AuditLog.created_at.desc()).limit(min(limit, 200))
-    if entity_type:
-        query = query.where(AuditLog.entity_type == entity_type)
-    if entity_id:
-        query = query.where(AuditLog.entity_id == entity_id)
-    if actor_id:
-        query = query.where(AuditLog.actor_id == actor_id)
-    return list(await db.scalars(query))
+) -> list[AuditLogItem]:
+    """PRD F10: "filterable log by deal, user, action type and date range,
+    read-only." Deal and date range had no filter at all before, so the
+    page could only ever show the newest 50 rows of everything."""
+    rows = await db.execute(
+        audit_query(
+            deal_id=deal_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            actor_id=actor_id,
+            action=action,
+            since=since,
+            until=until,
+            limit=limit,
+        )
+    )
+    return [to_audit_item(*row) for row in rows]
+
+
+@router.get("/audit-log/actions", response_model=list[str])
+async def list_audit_actions(
+    db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)
+) -> list[str]:
+    """Populates the Action filter from what has actually happened, rather
+    than a hand-kept list that drifts every time an action is added."""
+    return list(await db.scalars(select(AuditLog.action).distinct().order_by(AuditLog.action)))
 
 
 async def _read_settings(db: AsyncSession) -> SettingsRead:

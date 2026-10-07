@@ -70,14 +70,21 @@ class ArchiveItem(BaseModel):
 
 
 class AuditLogItem(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    """DESIGN.md §6.11 renders a sentence — "Meera Shah uploaded 'SBI
+    sanction letter.pdf' to Bank documents in Krishna Steel." — so the row
+    has to carry the actor's name and the deal, neither of which is on the
+    audit_log table itself. actor_id stays for filtering; actor_name is
+    None only for rows with no actor, which today means a failed login."""
 
     id: int
     actor_id: uuid.UUID | None
+    actor_name: str | None
     action: str
     entity_type: str
     entity_id: str
     detail: dict | list | str | int | float | bool | None
+    deal_id: uuid.UUID | None
+    deal_name: str | None
     created_at: datetime
 
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { useApprovals, useBulkApprovalAction } from "@/api/approvals"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { formatDateTime } from "@/lib/utils"
 import type { ApprovalItem, ApprovalType } from "@/api/types"
@@ -53,7 +54,6 @@ export function Approvals() {
   const bulkAction = useBulkApprovalAction()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [rejectOpen, setRejectOpen] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
 
   const deals = useMemo(() => {
     const names = new Set((approvals ?? []).map((a) => a.deal_name))
@@ -81,20 +81,20 @@ export function Approvals() {
   async function approveSelected() {
     const result = await bulkAction.mutateAsync({ ids: Array.from(selected), action: "approve" })
     setSelected(new Set())
-    setToast(
+    // DESIGN.md §5.11: "16 approved." or "15 approved, 1 already
+    // handled by Samir" — the per-item result, not a generic success.
+    toast(
       result.already_handled > 0
         ? `${result.approved} approved, ${result.already_handled} already handled by someone else`
         : `${result.approved} approved.`,
     )
-    setTimeout(() => setToast(null), 4000)
   }
 
   async function rejectSelected(note: string) {
     const result = await bulkAction.mutateAsync({ ids: Array.from(selected), action: "reject", note })
     setSelected(new Set())
     setRejectOpen(false)
-    setToast(`${result.rejected} rejected.`)
-    setTimeout(() => setToast(null), 4000)
+    toast(`${result.rejected} rejected.`)
   }
 
   return (
@@ -194,12 +194,6 @@ export function Approvals() {
           </tbody>
         </table>
       </div>
-
-      {toast && (
-        <div className="fixed bottom-6 right-6 w-90 rounded-md border-l-4 border-brand-600 bg-surface p-3 shadow-[0_4px_12px_rgba(16,24,16,.08),0_0_0_1px_#E3E6E3]">
-          <p className="text-body text-text-primary">{toast}</p>
-        </div>
-      )}
 
       <RejectDialog
         open={rejectOpen}

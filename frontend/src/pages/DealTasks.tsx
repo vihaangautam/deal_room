@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useCreateTask, useTasks } from "@/api/tasks"
 import { useDeal } from "@/api/deals"
+import { DealHeader } from "@/components/DealHeader"
 import { TaskStatusPill, NeedsAttentionPill } from "@/components/StatusPill"
 import { cn, formatDate } from "@/lib/utils"
 import type { TaskListItem, TaskPriority } from "@/api/types"
@@ -73,8 +74,7 @@ export function DealTasks() {
 
   return (
     <div className="px-6 py-6">
-      <div className="mb-1 text-meta text-text-tertiary">Deals /</div>
-      <h1 className="mb-4 text-title-page text-text-primary">{deal.name} — Tasks</h1>
+      <DealHeader deal={deal} />
 
       <div className="rounded-md border border-border">
         <table className="w-full">

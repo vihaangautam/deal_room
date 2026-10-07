@@ -1,50 +1,127 @@
-import { useAuditLog } from "@/api/admin"
-import { formatDateTime, initials } from "@/lib/utils"
+import { useState } from "react"
+import { useAuditActions, useAuditLog, type AuditFilters } from "@/api/admin"
+import { useDeals } from "@/api/deals"
+import { useUsers } from "@/api/users"
+import { ActivityFeed } from "@/components/ActivityFeed"
 
-// DESIGN.md §6.11: "{actor} {verb-ish summary of action} in {deal}." —
-// built here from the structured action/detail fields rather than a
-// hand-written sentence per action type, which would need one entry per
-// AuditLog.action value and go stale the moment a new one is added.
-function describe(action: string, detail: unknown): string {
-  const d = (detail && typeof detail === "object" ? (detail as Record<string, unknown>) : {}) ?? {}
-  const verb = action.split(".")[1]?.replace(/_/g, " ") ?? action
-  const noun = action.split(".")[0] ?? "item"
-  const name = typeof d.name === "string" ? ` '${d.name}'` : ""
-  return `${noun}${name} ${verb}`
-}
+// DESIGN.md §6.11: "Filters: Deal, Person, Action, Date range." The page
+// previously showed the newest 50 rows of everything with no way to narrow
+// them, which is most of what PRD F10 asks this screen for.
+const SELECT_CLASS =
+  "h-8 rounded-md border border-border bg-surface px-2 text-table text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-600"
 
 export function Activity() {
-  const { data: logs, isLoading } = useAuditLog()
+  const [filters, setFilters] = useState<AuditFilters>({})
+  const { data: logs, isLoading } = useAuditLog({ ...filters, limit: 200 })
+  const { data: deals } = useDeals()
+  const { data: users } = useUsers()
+  const { data: actions } = useAuditActions()
+
+  function set(patch: Partial<AuditFilters>) {
+    setFilters((prev) => {
+      const next = { ...prev, ...patch }
+      // An empty select means "no filter", not a filter on "".
+      for (const k of Object.keys(next) as (keyof AuditFilters)[]) {
+        if (!next[k]) delete next[k]
+      }
+      return next
+    })
+  }
+
+  const hasFilters = Object.keys(filters).length > 0
 
   return (
     <div className="px-6 py-6">
-      <h1 className="mb-4 text-title-page text-text-primary">Activity</h1>
+      <h1 className="mb-1 text-title-page text-text-primary">Activity</h1>
+      <p className="mb-4 text-table text-text-tertiary">
+        Every action on every deal, oldest kept forever. Read-only.
+      </p>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <select
+          aria-label="Filter by deal"
+          className={SELECT_CLASS}
+          value={filters.dealId ?? ""}
+          onChange={(e) => set({ dealId: e.target.value })}
+        >
+          <option value="">All deals</option>
+          {deals?.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          aria-label="Filter by person"
+          className={SELECT_CLASS}
+          value={filters.actorId ?? ""}
+          onChange={(e) => set({ actorId: e.target.value })}
+        >
+          <option value="">Anyone</option>
+          {users?.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.display_name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          aria-label="Filter by action"
+          className={SELECT_CLASS}
+          value={filters.action ?? ""}
+          onChange={(e) => set({ action: e.target.value })}
+        >
+          <option value="">Any action</option>
+          {actions?.map((a) => (
+            <option key={a} value={a}>
+              {a.replace(/[._]/g, " ")}
+            </option>
+          ))}
+        </select>
+
+        <label className="flex items-center gap-1.5 text-meta text-text-tertiary">
+          From
+          <input
+            type="date"
+            className={SELECT_CLASS}
+            value={filters.since?.slice(0, 10) ?? ""}
+            onChange={(e) => set({ since: e.target.value ? `${e.target.value}T00:00:00` : "" })}
+          />
+        </label>
+        <label className="flex items-center gap-1.5 text-meta text-text-tertiary">
+          To
+          <input
+            type="date"
+            className={SELECT_CLASS}
+            value={filters.until?.slice(0, 10) ?? ""}
+            onChange={(e) => set({ until: e.target.value ? `${e.target.value}T23:59:59` : "" })}
+          />
+        </label>
+
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => setFilters({})}
+            className="text-meta text-brand-700 hover:underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
 
       <div className="rounded-md border border-border">
-        {isLoading && (
-          <div className="p-4">
-            <div className="h-3 w-1/3 animate-pulse rounded bg-surface-sunken" />
-          </div>
-        )}
-        {!isLoading && (logs?.length ?? 0) === 0 && (
-          <div className="px-4 py-10 text-center">
-            <p className="text-body-strong text-text-primary">No activity yet</p>
-            <p className="text-table text-text-secondary">Actions on this deal will be recorded here.</p>
-          </div>
-        )}
-        {logs?.map((log) => (
-          <div key={log.id} className="flex h-9 items-center gap-3 border-b border-border px-4 last:border-b-0">
-            <span className="w-32 shrink-0 text-meta text-text-tertiary">
-              {formatDateTime(log.created_at)}
-            </span>
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-pill-neutral-bg text-[9px] font-semibold">
-              {log.actor_id ? initials(log.entity_type) : "·"}
-            </span>
-            <span className="truncate text-table text-text-primary">
-              {describe(log.action, log.detail)}
-            </span>
-          </div>
-        ))}
+        <ActivityFeed
+          items={logs}
+          isLoading={isLoading}
+          showDeal
+          emptyTitle={hasFilters ? "Nothing matches these filters" : "No activity yet"}
+          emptyBody={
+            hasFilters
+              ? "Try a wider date range or clear the filters."
+              : "Actions across every deal will be recorded here."
+          }
+        />
       </div>
     </div>
   )

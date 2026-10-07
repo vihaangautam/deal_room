@@ -6,8 +6,10 @@ import { useDocuments, useRenameDocument, useRequestDeleteDocument, documentDown
 import { useFolders } from "@/api/folders"
 import { useMyPermissions } from "@/api/permissions"
 import { useAuthStore } from "@/stores/auth"
-import { DealStagePill, DocumentStatusPill } from "@/components/StatusPill"
+import { DealHeader } from "@/components/DealHeader"
+import { DocumentStatusPill } from "@/components/StatusPill"
 import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/toast"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { MultiFileUploadDialog } from "@/components/MultiFileUpload"
@@ -77,6 +79,7 @@ function FileRow({
   const [renaming, setRenaming] = useState(false)
   const [baseName, setBaseName] = useState(() => doc.display_name.replace(/\.[^.]+$/, ""))
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const ext = doc.display_name.slice(doc.display_name.lastIndexOf("."))
 
   const isOwnPending = doc.status === "pending" && doc.uploaded_by_name === user?.display_name
   const isOwnRejected = doc.status === "rejected"
@@ -85,11 +88,27 @@ function FileRow({
   const canContribute = access === "contribute" && !dealClosed
 
   function saveRename() {
-    if (baseName.trim()) rename.mutate({ docId: doc.id, baseName: baseName.trim() })
+    const next = baseName.trim()
     setRenaming(false)
-  }
+    if (!next || `${next}${ext}` === doc.display_name) return
 
-  const ext = doc.display_name.slice(doc.display_name.lastIndexOf("."))
+    // DESIGN.md §5.12 names rename as the case that must carry Undo. The
+    // old base name is only in hand here, which is why this toast is
+    // raised at the call site rather than in the mutation hook.
+    const previous = doc.display_name.replace(/\.[^.]+$/, "")
+    rename.mutate(
+      { docId: doc.id, baseName: next },
+      {
+        onSuccess: () =>
+          toast(`Renamed to '${next}${ext}'.`, {
+            undo: () => {
+              setBaseName(previous)
+              rename.mutate({ docId: doc.id, baseName: previous })
+            },
+          }),
+      },
+    )
+  }
 
   return (
     <tr className="group h-10 border-t border-border hover:bg-surface-hover">
@@ -162,7 +181,19 @@ function FileRow({
         doc={doc}
         pending={requestDelete.isPending}
         onConfirm={(reason) => {
-          requestDelete.mutate({ docId: doc.id, reason: reason || undefined })
+          requestDelete.mutate(
+            { docId: doc.id, reason: reason || undefined },
+            {
+              // An approver's own request archives at once (PRD §7), so
+              // the two outcomes need different words.
+              onSuccess: (result) =>
+                toast(
+                  result.status === "archived"
+                    ? `'${doc.display_name}' moved to the Archive.`
+                    : `Deletion requested. Samir will review it.`,
+                ),
+            },
+          )
           setDeleteOpen(false)
         }}
       />
@@ -192,13 +223,6 @@ export function DealDocuments() {
     return counts
   }, [documents])
 
-  // PRD §5: a Documents count means active files the viewer can see —
-  // the folder list beside this already counted that way.
-  const activeDocCount = useMemo(
-    () => (documents ?? []).filter((d) => d.status === "active").length,
-    [documents],
-  )
-
   const visibleDocs = useMemo(
     () => (documents ?? []).filter((d) => d.folder_id === selectedFolderId),
     [documents, selectedFolderId],
@@ -213,44 +237,24 @@ export function DealDocuments() {
 
   return (
     <div className="px-6 py-6">
-      <div className="mb-1 text-meta text-text-tertiary">Deals /</div>
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-title-page text-text-primary">{deal.name}</h1>
-          <DealStagePill stage={deal.stage} />
-        </div>
-        <div className="flex gap-2">
-          {user?.role === "admin" && (
-            <Button variant="secondary" onClick={() => setStageDialogOpen(true)}>
-              Change stage
-            </Button>
-          )}
-          {canContributeAnywhere && (!dealClosed || deal.allow_uploads_when_closed) && (
-            <Button onClick={() => setUploadOpen(true)}>
-              <Upload className="h-4 w-4" />
-              Upload files
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <div className="mb-4 flex h-10 items-center gap-6 border-b border-border">
-        <Link
-          to={`/deals/${dealId}/documents`}
-          className="flex h-full items-center border-b-2 border-brand-600 text-body-strong text-brand-700"
-        >
-          Documents {activeDocCount}
-        </Link>
-        {deal.stage === "running" && (
-          <button
-            type="button"
-            onClick={() => navigate(`/deals/${dealId}/tasks`)}
-            className="flex h-full items-center text-body-strong text-text-secondary"
-          >
-            Tasks
-          </button>
-        )}
-      </div>
+      <DealHeader
+        deal={deal}
+        actions={
+          <>
+            {user?.role === "admin" && (
+              <Button variant="secondary" onClick={() => setStageDialogOpen(true)}>
+                Change stage
+              </Button>
+            )}
+            {canContributeAnywhere && (!dealClosed || deal.allow_uploads_when_closed) && (
+              <Button onClick={() => setUploadOpen(true)}>
+                <Upload className="h-4 w-4" />
+                Upload files
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {dealClosed && (
         <div className="mb-4 rounded-md bg-info-50 px-3 py-2 text-body text-text-info">
