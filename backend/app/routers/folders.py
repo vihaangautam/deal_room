@@ -10,7 +10,7 @@ from app.models.deal import Deal
 from app.models.document import Document
 from app.models.folder import FolderTemplate, UserFolderPermission
 from app.models.user import User
-from app.schemas.folder import FolderCreate, FolderRead, FolderUpdate
+from app.schemas.folder import FolderCreate, FolderRead, FolderReorder, FolderUpdate
 
 router = APIRouter(prefix="/folders", tags=["folders"])
 
@@ -59,6 +59,32 @@ async def create_folder(
     await db.commit()
     await db.refresh(folder)
     return folder
+
+
+@router.post("/order", response_model=list[FolderRead])
+async def reorder_folders(
+    body: FolderReorder, db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)
+) -> list[FolderTemplate]:
+    """PRD F4: folders appear in a fixed order in every deal, so reordering
+    them is a single list, not a field on one row. One request and one
+    transaction rather than a PATCH per folder, because a reorder that
+    half-applies leaves every deal's folder list scrambled.
+    """
+    folders = list(await db.scalars(select(FolderTemplate)))
+    by_id = {folder.id: folder for folder in folders}
+
+    if set(body.folder_ids) != set(by_id) or len(body.folder_ids) != len(folders):
+        # A stale list means someone added or deleted a folder in another
+        # tab; applying it would drop the missing one to the bottom.
+        raise HTTPException(
+            status_code=409, detail="The folder list changed. Reload the page and try again."
+        )
+
+    for position, folder_id in enumerate(body.folder_ids, start=1):
+        by_id[folder_id].display_order = position
+
+    await db.commit()
+    return sorted(folders, key=lambda f: f.display_order)
 
 
 @router.patch("/{folder_id}", response_model=FolderRead)

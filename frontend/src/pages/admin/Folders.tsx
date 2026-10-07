@@ -1,11 +1,20 @@
-import { useState } from "react"
-import { Plus } from "lucide-react"
-import { useCreateFolder, useDeleteFolder, useFolders, useRenameFolder, isFolderDeleteBlocked } from "@/api/folders"
+import { useRef, useState } from "react"
+import { GripVertical, Plus } from "lucide-react"
+import {
+  isFolderDeleteBlocked,
+  useCreateFolder,
+  useDeleteFolder,
+  useFolders,
+  useRenameFolder,
+  useReorderFolders,
+} from "@/api/folders"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Field } from "@/components/ui/field"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
+import { toast } from "@/components/ui/toast"
+import { cn } from "@/lib/utils"
 import type { Folder } from "@/api/types"
 
 function AddFolderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
@@ -84,7 +93,19 @@ function BlockedDialog({
   )
 }
 
-function FolderRow({ folder }: { folder: Folder }) {
+function FolderRow({
+  folder,
+  dragging,
+  onDragStart,
+  onDragEnter,
+  onDragEnd,
+}: {
+  folder: Folder
+  dragging: boolean
+  onDragStart: () => void
+  onDragEnter: () => void
+  onDragEnd: () => void
+}) {
   const rename = useRenameFolder()
   const deleteFolder = useDeleteFolder()
   const [renaming, setRenaming] = useState(false)
@@ -111,7 +132,24 @@ function FolderRow({ folder }: { folder: Folder }) {
   }
 
   return (
-    <tr className="h-10 border-t border-border hover:bg-surface-hover">
+    <tr
+      draggable={!renaming}
+      onDragStart={onDragStart}
+      onDragEnter={onDragEnter}
+      onDragOver={(e) => e.preventDefault()}
+      onDragEnd={onDragEnd}
+      onDrop={(e) => e.preventDefault()}
+      className={cn(
+        "h-10 border-t border-border hover:bg-surface-hover",
+        dragging && "opacity-40",
+      )}
+    >
+      <td className="w-8 px-2">
+        <GripVertical
+          className="h-4 w-4 cursor-grab text-text-tertiary active:cursor-grabbing"
+          aria-hidden
+        />
+      </td>
       <td className="px-4">
         {renaming ? (
           <input
@@ -176,7 +214,57 @@ function FolderRow({ folder }: { folder: Folder }) {
 
 export function Folders() {
   const { data: folders, isLoading } = useFolders()
+  const reorder = useReorderFolders()
   const [addOpen, setAddOpen] = useState(false)
+  // The list is reordered locally as the row is dragged and saved once on
+  // drop; `dragOrder` is null whenever nothing is being dragged, so the
+  // server's order stays the source of truth the rest of the time.
+  //
+  // The drag position and the working list live in refs, not state,
+  // because dragstart and dragenter can both land before React commits a
+  // render — a quick drag then reads a stale index out of the handler's
+  // closure and moves nothing. State here only drives the dimmed row.
+  const dragFrom = useRef<number | null>(null)
+  const pendingOrder = useRef<Folder[] | null>(null)
+  const [dragOrder, setDragOrder] = useState<Folder[] | null>(null)
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
+
+  const ordered = dragOrder ?? folders ?? []
+
+  function startDrag(index: number) {
+    dragFrom.current = index
+    pendingOrder.current = [...(folders ?? [])]
+    setDraggingIndex(index)
+  }
+
+  function moveTo(index: number) {
+    const from = dragFrom.current
+    if (from === null || from === index) return
+    const next = [...(pendingOrder.current ?? folders ?? [])]
+    const [moved] = next.splice(from, 1)
+    if (!moved) return
+    next.splice(index, 0, moved)
+    pendingOrder.current = next
+    dragFrom.current = index
+    setDragOrder(next)
+    setDraggingIndex(index)
+  }
+
+  function commitOrder() {
+    const moving = pendingOrder.current
+    pendingOrder.current = null
+    dragFrom.current = null
+    setDraggingIndex(null)
+    setDragOrder(null)
+    if (!moving) return
+    // Nothing actually moved — a click on the handle, or a drag back to
+    // where it started.
+    if (moving.map((f) => f.id).join() === (folders ?? []).map((f) => f.id).join()) return
+    reorder.mutate(
+      moving.map((f) => f.id),
+      { onSuccess: () => toast("Folder order saved.") },
+    )
+  }
 
   return (
     <div className="px-6 py-6">
@@ -188,13 +276,15 @@ export function Folders() {
         </Button>
       </div>
       <p className="mb-4 text-table text-text-tertiary">
-        Folders appear in every deal. Changes apply everywhere immediately.
+        Folders appear in every deal, in this order. Drag a row to reorder them. Changes apply
+        everywhere immediately.
       </p>
 
       <div className="rounded-md border border-border">
         <table className="w-full">
           <thead>
             <tr className="h-9 bg-surface-sunken text-left text-label text-text-tertiary">
+              <th className="w-8 px-2" />
               <th className="px-4 font-medium">Name</th>
               <th className="w-10 px-2" />
             </tr>
@@ -202,13 +292,20 @@ export function Folders() {
           <tbody>
             {isLoading && (
               <tr className="h-10 border-t border-border">
-                <td colSpan={2} className="px-4">
+                <td colSpan={3} className="px-4">
                   <div className="h-3 w-1/3 animate-pulse rounded bg-surface-sunken" />
                 </td>
               </tr>
             )}
-            {folders?.map((folder) => (
-              <FolderRow key={folder.id} folder={folder} />
+            {ordered.map((folder, index) => (
+              <FolderRow
+                key={folder.id}
+                folder={folder}
+                dragging={draggingIndex === index}
+                onDragStart={() => startDrag(index)}
+                onDragEnter={() => moveTo(index)}
+                onDragEnd={commitOrder}
+              />
             ))}
           </tbody>
         </table>

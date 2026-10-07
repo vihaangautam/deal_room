@@ -59,6 +59,8 @@ export function MultiFileUploadDialog({
   dealName,
   folders,
   defaultFolderId,
+  taskId,
+  title,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -66,9 +68,13 @@ export function MultiFileUploadDialog({
   dealName: string
   folders: Folder[]
   defaultFolderId: string
+  // Set for a task's "Upload a new file": the document still lands in a
+  // folder like any other, and is linked to the task as well.
+  taskId?: string
+  title?: string
 }) {
   const [folderId, setFolderId] = useState(defaultFolderId)
-  const { items, addFiles, retry, clear } = useUpload(dealId, folderId)
+  const { items, addFiles, retry, clear } = useUpload(dealId, folderId, taskId)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
 
@@ -87,7 +93,7 @@ export function MultiFileUploadDialog({
     <Dialog
       open={open}
       onOpenChange={(v) => (v ? onOpenChange(v) : handleClose())}
-      title={`Upload to ${dealName}`}
+      title={title ?? `Upload to ${dealName}`}
       width={640}
     >
       <div className="flex flex-col gap-4">

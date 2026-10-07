@@ -34,7 +34,11 @@ async function sha256Hex(file: File): Promise<string> {
     .join("")
 }
 
-export function useUpload(dealId: string, folderId: string) {
+// taskId switches the init endpoint to the task's own, which also links
+// the finished document to the task (PRD F8 "Upload new"). Everything
+// after init — chunking, complete — is identical, which is why only this
+// one call changes.
+export function useUpload(dealId: string, folderId: string, taskId?: string) {
   const [items, setItems] = useState<UploadItem[]>([])
   const qc = useQueryClient()
 
@@ -54,7 +58,10 @@ export function useUpload(dealId: string, folderId: string) {
         update(id, { status: "hashing" })
         const sha256 = await sha256Hex(file)
 
-        const init = await apiFetch<{ doc_id: string }>(`/deals/${dealId}/documents/init`, {
+        const initPath = taskId
+          ? `/deals/${dealId}/tasks/${taskId}/attachments/upload-init`
+          : `/deals/${dealId}/documents/init`
+        const init = await apiFetch<{ doc_id: string }>(initPath, {
           method: "POST",
           body: { filename: file.name, size: file.size, sha256, mime_type: file.type, folder_id: folderId },
         })
@@ -81,6 +88,8 @@ export function useUpload(dealId: string, folderId: string) {
         })
         qc.invalidateQueries({ queryKey: ["documents", dealId] })
         qc.invalidateQueries({ queryKey: ["approvals"] })
+        // The attachment list on the task is part of the task's detail.
+        if (taskId) qc.invalidateQueries({ queryKey: ["tasks", dealId, taskId] })
       } catch (err) {
         if (err instanceof ApiError && err.status === 409) {
           update(id, { status: "duplicate", message: String(err.detail) })
@@ -91,7 +100,7 @@ export function useUpload(dealId: string, folderId: string) {
         }
       }
     },
-    [dealId, folderId, update, qc],
+    [dealId, folderId, taskId, update, qc],
   )
 
   const addFiles = useCallback(

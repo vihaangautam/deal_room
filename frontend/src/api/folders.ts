@@ -23,17 +23,26 @@ export function useCreateFolder() {
   })
 }
 
+export function useReorderFolders() {
+  const qc = useQueryClient()
+  return useMutation({
+    // One request for the whole order: a reorder applied one folder at a
+    // time can half-fail and scramble the list in every deal.
+    mutationFn: (folderIds: string[]) =>
+      apiFetch<Folder[]>("/folders/order", { method: "POST", body: { folder_ids: folderIds } }),
+    onSuccess: (folders) => {
+      qc.setQueryData(["folders"], folders)
+      qc.invalidateQueries({ queryKey: ["folders"] })
+    },
+  })
+}
+
 export function useRenameFolder() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ folderId, name }: { folderId: string; name: string }) =>
       apiFetch<Folder>(`/folders/${folderId}`, { method: "PATCH", body: { name } }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["folders"] })
-      // PRD F4: a new folder's default access applies to current members
-      // at once, so each viewer's own access map changed too.
-      qc.invalidateQueries({ queryKey: ["my-permissions"] })
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["folders"] }),
   })
 }
 
@@ -52,8 +61,7 @@ export function useDeleteFolder() {
     mutationFn: (folderId: string) => apiFetch<void>(`/folders/${folderId}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["folders"] })
-      // PRD F4: a new folder's default access applies to current members
-      // at once, so each viewer's own access map changed too.
+      // The deleted folder's permission rows went with it.
       qc.invalidateQueries({ queryKey: ["my-permissions"] })
     },
   })

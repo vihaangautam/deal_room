@@ -275,7 +275,11 @@ CREATE INDEX approval_status_idx ON approval_requests(status, created_at DESC);
 -- SETTINGS (key-value store; admin-editable)
 CREATE TABLE settings (
     key             TEXT PRIMARY KEY,
-    value           JSONB NOT NULL,
+    -- Nullable, against ARCHITECTURE's DDL: PRD F11 makes "Keep forever"
+    -- the default for archive_retention_days, and "forever" is the
+    -- absence of a number. NOT NULL here meant the one choice the admin
+    -- is most likely to make was the one the API couldn't store.
+    value           JSONB,
     updated_by      UUID REFERENCES users(id),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

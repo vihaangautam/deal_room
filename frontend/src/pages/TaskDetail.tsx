@@ -13,10 +13,14 @@ import {
 import { CommentThread } from "@/components/CommentThread"
 import { useDeal } from "@/api/deals"
 import { useDocuments } from "@/api/documents"
+import { useFolders } from "@/api/folders"
+import { useMyPermissions } from "@/api/permissions"
 import { useUsers } from "@/api/users"
 import { useAuthStore } from "@/stores/auth"
 import { TaskStatusPill, NeedsAttentionPill, DocumentStatusPill } from "@/components/StatusPill"
 import { Button } from "@/components/ui/button"
+import { Dialog } from "@/components/ui/dialog"
+import { MultiFileUploadDialog } from "@/components/MultiFileUpload"
 import { Menu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { formatDate, formatDateTime, initials } from "@/lib/utils"
 import type { TaskAttachmentItem } from "@/api/types"
@@ -48,6 +52,8 @@ export function TaskDetail() {
   const { data: deal } = useDeal(dealId)
   const { data: users } = useUsers()
   const { data: documents } = useDocuments(dealId)
+  const { data: folders } = useFolders()
+  const { data: myPermissions } = useMyPermissions()
   const updateTask = useUpdateTask(dealId ?? "", taskId ?? "")
   const assignTask = useAssignTask(dealId ?? "", taskId ?? "")
   const changeStatus = useChangeTaskStatus(dealId ?? "", taskId ?? "")
@@ -55,6 +61,8 @@ export function TaskDetail() {
   const requestDelete = useRequestDeleteTask(dealId ?? "", taskId ?? "")
   const linkAttachment = useLinkAttachment(dealId ?? "", taskId ?? "")
 
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
   const [editingDescription, setEditingDescription] = useState(false)
   const [description, setDescription] = useState("")
 
@@ -88,6 +96,12 @@ export function TaskDetail() {
   const linkableDocuments = (documents ?? []).filter(
     (d) => d.status === "active" && !task.attachments.some((a) => a.document_id === d.id),
   )
+  // PRD §7: uploading a new attachment needs Contribute on the folder it
+  // lands in, so a viewer with no Contribute anywhere gets the link option
+  // alone rather than an upload that is refused on submit.
+  const contributeFolders = (folders ?? []).filter(
+    (f) => (myPermissions?.[f.id] ?? "none") === "contribute",
+  )
 
   return (
     <div className="mx-auto flex max-w-content gap-6 px-6 py-6">
@@ -97,6 +111,11 @@ export function TaskDetail() {
 
         {canActOnTask && (
           <div className="mb-6 flex items-center gap-2">
+            {/* DESIGN.md §5.11: Attach is a menu of "Link a document from
+                this deal" / "Upload a new file". Only the first existed —
+                the upload-init endpoint behind the second was built and
+                tested but unreachable, so PRD F8's "Upload new" could not
+                be done from a task at all. */}
             <Menu
               trigger={
                 <Button variant="secondary" size="sm">
@@ -105,14 +124,12 @@ export function TaskDetail() {
                 </Button>
               }
             >
-              {linkableDocuments.length === 0 && (
-                <p className="px-3 py-2 text-meta text-text-tertiary">No documents to link.</p>
+              <RowMenuItem onSelect={() => setLinkOpen(true)}>
+                Link a document from this deal
+              </RowMenuItem>
+              {contributeFolders.length > 0 && (
+                <RowMenuItem onSelect={() => setUploadOpen(true)}>Upload a new file</RowMenuItem>
               )}
-              {linkableDocuments.map((doc) => (
-                <RowMenuItem key={doc.id} onSelect={() => linkAttachment.mutate(doc.id)}>
-                  {doc.display_name}
-                </RowMenuItem>
-              ))}
             </Menu>
           </div>
         )}
@@ -268,6 +285,49 @@ export function TaskDetail() {
           </Button>
         )}
       </aside>
+
+      <Dialog
+        open={linkOpen}
+        onOpenChange={setLinkOpen}
+        title="Link a document from this deal"
+        width={480}
+      >
+        {linkableDocuments.length === 0 ? (
+          <p className="text-body text-text-secondary">
+            Every file you can see in this deal is already attached, or there are none yet.
+          </p>
+        ) : (
+          <div className="max-h-80 overflow-y-auto rounded-md border border-border">
+            {linkableDocuments.map((doc) => (
+              <button
+                key={doc.id}
+                type="button"
+                onClick={() => {
+                  linkAttachment.mutate(doc.id)
+                  setLinkOpen(false)
+                }}
+                className="flex h-10 w-full items-center gap-2 border-b border-border px-3 text-left last:border-b-0 hover:bg-surface-hover"
+              >
+                <Paperclip className="h-3.5 w-3.5 shrink-0 text-text-tertiary" aria-hidden />
+                <span className="truncate text-table text-text-primary">{doc.display_name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </Dialog>
+
+      {contributeFolders[0] && (
+        <MultiFileUploadDialog
+          open={uploadOpen}
+          onOpenChange={setUploadOpen}
+          dealId={dealId}
+          dealName={task.title}
+          taskId={taskId}
+          title={`Upload a file for ${task.key}`}
+          folders={contributeFolders}
+          defaultFolderId={contributeFolders[0].id}
+        />
+      )}
     </div>
   )
 }
