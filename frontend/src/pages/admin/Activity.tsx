@@ -3,6 +3,7 @@ import { useAuditActions, useAuditLog, type AuditFilters } from "@/api/admin"
 import { useDeals } from "@/api/deals"
 import { useUsers } from "@/api/users"
 import { ActivityFeed } from "@/components/ActivityFeed"
+import { PageHeader } from "@/components/PageHeader"
 
 // DESIGN.md §6.11: "Filters: Deal, Person, Action, Date range." The page
 // previously showed the newest 50 rows of everything with no way to narrow
@@ -31,8 +32,9 @@ export function Activity() {
   const hasFilters = Object.keys(filters).length > 0
 
   return (
-    <div className="px-6 py-6">
-      <h1 className="mb-1 text-title-page text-text-primary">Activity</h1>
+    <>
+      <PageHeader title="Activity" />
+      <div className="px-6 py-6">
       <p className="mb-4 text-table text-text-tertiary">
         Every action on every deal, oldest kept forever. Read-only.
       </p>
@@ -123,6 +125,7 @@ export function Activity() {
           }
         />
       </div>
-    </div>
+      </div>
+    </>
   )
 }

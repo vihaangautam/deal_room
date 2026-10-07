@@ -9,6 +9,7 @@ import {
   useReorderFolders,
 } from "@/api/folders"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/PageHeader"
 import { Input } from "@/components/ui/input"
 import { Field } from "@/components/ui/field"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
@@ -270,14 +271,17 @@ export function Folders() {
   }
 
   return (
-    <div className="px-6 py-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="text-title-page text-text-primary">Folders</h1>
-        <Button onClick={() => setAddOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Add folder
-        </Button>
-      </div>
+    <>
+      <PageHeader
+        title="Folders"
+        actions={
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Add folder
+          </Button>
+        }
+      />
+      <div className="px-6 py-6">
       <p className="mb-4 text-table text-text-tertiary">
         Folders appear in every deal, in this order. Drag a row to reorder them. Changes apply
         everywhere immediately.
@@ -315,6 +319,7 @@ export function Folders() {
       </div>
 
       <AddFolderDialog open={addOpen} onOpenChange={setAddOpen} />
-    </div>
+      </div>
+    </>
   )
 }

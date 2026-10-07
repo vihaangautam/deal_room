@@ -10,6 +10,7 @@ import {
 } from "@/api/admin"
 import { documentDownloadUrl } from "@/api/documents"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/PageHeader"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { formatDate } from "@/lib/utils"
@@ -109,8 +110,9 @@ export function Archive() {
   const retentionLabel = retention === null ? "Keep forever" : (RETENTION_LABEL[retention] ?? `${retention} days`)
 
   return (
-    <div className="px-6 py-6">
-      <h1 className="mb-1 text-title-page text-text-primary">Archive</h1>
+    <>
+      <PageHeader title="Archive" />
+      <div className="px-6 py-6">
       <div className="mb-4 flex items-baseline justify-between">
         <p className="text-table text-text-tertiary">
           Files approved for deletion. Kept until you remove them under retention settings.
@@ -196,6 +198,7 @@ export function Archive() {
           }
         }}
       />
-    </div>
+      </div>
+    </>
   )
 }

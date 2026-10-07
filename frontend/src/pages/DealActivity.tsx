@@ -37,9 +37,9 @@ export function DealActivity() {
   const showHistory = isAdmin && (pane === "all" || pane === "history")
 
   return (
-    <div className="px-6 py-6">
-      <DealHeader deal={deal} />
-
+    <>
+    <DealHeader deal={deal} />
+      <div className="px-6 py-6">
       {panes.length > 0 && (
         <div className="mb-4 flex gap-4">
           {panes.map((p) => (
@@ -77,6 +77,7 @@ export function DealActivity() {
           </section>
         )}
       </div>
-    </div>
+      </div>
+    </>
   )
 }

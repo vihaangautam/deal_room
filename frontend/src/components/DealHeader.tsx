@@ -6,6 +6,7 @@ import { useDocuments } from "@/api/documents"
 import { useTasks } from "@/api/tasks"
 import { useAuthStore } from "@/stores/auth"
 import { DealStagePill } from "@/components/StatusPill"
+import { PageHeader } from "@/components/PageHeader"
 import { cn } from "@/lib/utils"
 import type { DealDetail } from "@/api/types"
 
@@ -42,41 +43,33 @@ export function DealHeader({ deal, actions }: { deal: DealDetail; actions?: Reac
   ].filter((t) => t.show)
 
   return (
-    <>
-      <div className="mb-1 text-meta text-text-tertiary">
+    <PageHeader
+      breadcrumb={
         <Link to="/deals" className="hover:underline">
           Deals
-        </Link>{" "}
-        /
-      </div>
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-title-page text-text-primary">{deal.name}</h1>
-          <DealStagePill stage={deal.stage} />
-        </div>
-        {actions && <div className="flex gap-2">{actions}</div>}
-      </div>
-
-      <div className="mb-4 flex h-10 items-center gap-6 border-b border-border">
-        {tabs.map((tab) => {
-          const active = location.pathname.startsWith(tab.to)
-          return (
-            <Link
-              key={tab.to}
-              to={tab.to}
-              className={cn(
-                "flex h-full items-center gap-1.5 border-b-2 text-body-strong",
-                active
-                  ? "border-brand-600 text-brand-700"
-                  : "border-transparent text-text-secondary hover:text-text-primary",
-              )}
-            >
-              {tab.label}
-              <span className="text-meta font-normal text-text-tertiary">{tab.count}</span>
-            </Link>
-          )
-        })}
-      </div>
-    </>
+        </Link>
+      }
+      title={deal.name}
+      pill={<DealStagePill stage={deal.stage} />}
+      actions={actions}
+      tabs={tabs.map((tab) => {
+        const active = location.pathname.startsWith(tab.to)
+        return (
+          <Link
+            key={tab.to}
+            to={tab.to}
+            className={cn(
+              "flex h-full items-center gap-1.5 border-b-2 text-body-strong",
+              active
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-text-secondary hover:text-text-primary",
+            )}
+          >
+            {tab.label}
+            <span className="text-meta font-normal text-text-tertiary">{tab.count}</span>
+          </Link>
+        )
+      })}
+    />
   )
 }

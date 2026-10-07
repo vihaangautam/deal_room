@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { useApprovals, useBulkApprovalAction } from "@/api/approvals"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/PageHeader"
 import { toast } from "@/components/ui/toast"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { formatDateTime } from "@/lib/utils"
@@ -98,11 +99,12 @@ export function Approvals() {
   }
 
   return (
-    <div className="px-6 py-6">
-      <div className="mb-4 flex items-baseline gap-2">
-        <h1 className="text-title-page text-text-primary">Approvals</h1>
-        <span className="text-table text-text-tertiary">{rows.length} waiting</span>
-      </div>
+    <>
+      <PageHeader
+        title="Approvals"
+        pill={<span className="text-table text-text-tertiary">{rows.length} waiting</span>}
+      />
+      <div className="px-6 py-6">
 
       <div className="rounded-md border border-border">
         {selected.size > 0 ? (
@@ -202,7 +204,8 @@ export function Approvals() {
         pending={bulkAction.isPending}
         onConfirm={rejectSelected}
       />
-    </div>
+      </div>
+    </>
   )
 }
 

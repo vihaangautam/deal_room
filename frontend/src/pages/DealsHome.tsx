@@ -5,6 +5,7 @@ import { useCreateDeal, useDeals } from "@/api/deals"
 import { ApiError } from "@/api/client"
 import { useAuthStore } from "@/stores/auth"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/PageHeader"
 import { Input } from "@/components/ui/input"
 import { Field } from "@/components/ui/field"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
@@ -128,16 +129,19 @@ export function DealsHome() {
   }, [deals, tab, oldFilter, search])
 
   return (
-    <div className="px-6 py-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-title-page text-text-primary">Deals</h1>
-        {user?.role === "admin" && (
-          <Button onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4" />
-            New deal
-          </Button>
-        )}
-      </div>
+    <>
+      <PageHeader
+        title="Deals"
+        actions={
+          user?.role === "admin" && (
+            <Button onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New deal
+            </Button>
+          )
+        }
+      />
+      <div className="px-6 py-6">
 
       <div className="rounded-lg border border-border bg-surface">
         <div className="flex h-10 items-center gap-6 border-b border-border px-4">
@@ -231,7 +235,8 @@ export function DealsHome() {
       </div>
 
       <NewDealDialog open={dialogOpen} onOpenChange={setDialogOpen} />
-    </div>
+      </div>
+    </>
   )
 }
 

@@ -236,26 +236,26 @@ export function DealDocuments() {
   if (!dealId || !deal) return null
 
   return (
-    <div className="px-6 py-6">
-      <DealHeader
-        deal={deal}
-        actions={
-          <>
-            {user?.role === "admin" && (
-              <Button variant="secondary" onClick={() => setStageDialogOpen(true)}>
-                Change stage
-              </Button>
-            )}
-            {canContributeAnywhere && (!dealClosed || deal.allow_uploads_when_closed) && (
-              <Button onClick={() => setUploadOpen(true)}>
-                <Upload className="h-4 w-4" />
-                Upload files
-              </Button>
-            )}
-          </>
-        }
-      />
-
+    <>
+    <DealHeader
+      deal={deal}
+      actions={
+        <>
+          {user?.role === "admin" && (
+            <Button variant="secondary" onClick={() => setStageDialogOpen(true)}>
+              Change stage
+            </Button>
+          )}
+          {canContributeAnywhere && (!dealClosed || deal.allow_uploads_when_closed) && (
+            <Button onClick={() => setUploadOpen(true)}>
+              <Upload className="h-4 w-4" />
+              Upload files
+            </Button>
+          )}
+        </>
+      }
+    />
+      <div className="px-6 py-6">
       {dealClosed && (
         <div className="mb-4 rounded-md bg-info-50 px-3 py-2 text-body text-text-info">
           This deal is closed. Files can be downloaded but not changed.
@@ -369,6 +369,7 @@ export function DealDocuments() {
       )}
 
       <StageChangeDialog open={stageDialogOpen} onOpenChange={setStageDialogOpen} deal={deal} />
-    </div>
+      </div>
+    </>
   )
 }

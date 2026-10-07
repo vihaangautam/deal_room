@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useAdminUsers, useCreateUser, usePermissionMatrix, useResetPassword, useSetPermission, useUpdateUser } from "@/api/admin"
 import { useFolders } from "@/api/folders"
 import { Button } from "@/components/ui/button"
+import { PageHeader } from "@/components/PageHeader"
 import { Input } from "@/components/ui/input"
 import { Field } from "@/components/ui/field"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
@@ -269,8 +270,9 @@ export function Users() {
   const [tab, setTab] = useState<"users" | "permissions">("users")
 
   return (
-    <div className="px-6 py-6">
-      <h1 className="mb-4 text-title-page text-text-primary">Users & permissions</h1>
+    <>
+      <PageHeader title="Users & permissions" />
+      <div className="px-6 py-6">
       <div className="mb-4 flex h-9 items-center gap-6 border-b border-border">
         {(["users", "permissions"] as const).map((t) => (
           <button
@@ -287,6 +289,7 @@ export function Users() {
         ))}
       </div>
       {tab === "users" ? <UsersTab /> : <PermissionMatrixTab />}
-    </div>
+      </div>
+    </>
   )
 }

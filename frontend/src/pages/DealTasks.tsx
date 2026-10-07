@@ -73,9 +73,9 @@ export function DealTasks() {
   }
 
   return (
-    <div className="px-6 py-6">
-      <DealHeader deal={deal} />
-
+    <>
+    <DealHeader deal={deal} />
+      <div className="px-6 py-6">
       <div className="rounded-md border border-border">
         <table className="w-full">
           <thead>
@@ -138,6 +138,7 @@ export function DealTasks() {
           </tbody>
         </table>
       </div>
-    </div>
+      </div>
+    </>
   )
 }

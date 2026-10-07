@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom"
 import { useMyTasks } from "@/api/tasks"
 import { TaskStatusPill, NeedsAttentionPill } from "@/components/StatusPill"
 import { formatDate } from "@/lib/utils"
+import { PageHeader } from "@/components/PageHeader"
 import type { TaskListItem, TaskStatus } from "@/api/types"
 
 // DESIGN.md §6.6 — this exact order.
@@ -26,21 +27,24 @@ export function MyTasks() {
 
   if (!tasks || tasks.length === 0) {
     return (
-      <div className="px-6 py-6">
-        <h1 className="mb-4 text-title-page text-text-primary">My Tasks</h1>
+      <>
+        <PageHeader title="My Tasks" />
+        <div className="px-6 py-6">
         <div className="rounded-md border border-border px-4 py-10 text-center">
           <p className="text-body-strong text-text-primary">Nothing assigned to you</p>
           <p className="text-table text-text-secondary">
             Tasks assigned to you on running deals appear here.
           </p>
         </div>
-      </div>
+        </div>
+      </>
     )
   }
 
   return (
-    <div className="px-6 py-6">
-      <h1 className="mb-4 text-title-page text-text-primary">My Tasks</h1>
+    <>
+      <PageHeader title="My Tasks" />
+      <div className="px-6 py-6">
 
       <div className="flex flex-col gap-6">
         {GROUP_ORDER.map((status) => {
@@ -92,6 +96,7 @@ export function MyTasks() {
           )
         })}
       </div>
-    </div>
+      </div>
+    </>
   )
 }
