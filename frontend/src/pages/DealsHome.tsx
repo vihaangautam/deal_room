@@ -128,7 +128,7 @@ export function DealsHome() {
   }, [deals, tab, oldFilter, search])
 
   return (
-    <div className="mx-auto max-w-content px-6 py-6">
+    <div className="px-6 py-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-title-page text-text-primary">Deals</h1>
         {user?.role === "admin" && (

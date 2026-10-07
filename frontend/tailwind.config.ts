@@ -76,9 +76,6 @@ export default {
         label: ["12px", { lineHeight: "16px", fontWeight: "500" }],
         pill: ["12px", { lineHeight: "16px", fontWeight: "500" }],
       },
-      maxWidth: {
-        content: "1200px", // DESIGN.md §4.1
-      },
       transitionDuration: {
         DEFAULT: "120ms", // DESIGN.md §3.3 — hover/menus
       },

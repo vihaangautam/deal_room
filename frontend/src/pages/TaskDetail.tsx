@@ -104,7 +104,7 @@ export function TaskDetail() {
   )
 
   return (
-    <div className="mx-auto flex max-w-content gap-6 px-6 py-6">
+    <div className="flex gap-6 px-6 py-6">
       <div className="min-w-[560px] flex-1">
         <p className="mb-1 text-meta text-text-tertiary">{task.key}</p>
         <h1 className="mb-4 text-title-task text-text-primary">{task.title}</h1>
