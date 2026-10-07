@@ -10,6 +10,8 @@ the same S3Mock placeholder credential, but the code shape is correct for
 the real OCI cutover.
 """
 
+from typing import IO
+
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
@@ -56,7 +58,11 @@ def ensure_bucket() -> None:
         app_client.create_bucket(Bucket=settings.oci_bucket)
 
 
-def put_object(key: str, body: bytes, content_type: str) -> None:
+def put_object(key: str, body: bytes | IO[bytes], content_type: str) -> None:
+    """body may be an open file object — boto3 streams it rather than
+    reading it into memory, which is the whole point at PRD F5's 2 GB
+    per-file ceiling. Still a single PUT, not multipart (CLAUDE.md §5.6);
+    2 GB is within S3's and OCI's 5 GB single-PUT limit."""
     app_client.put_object(Bucket=settings.oci_bucket, Key=key, Body=body, ContentType=content_type)
 
 

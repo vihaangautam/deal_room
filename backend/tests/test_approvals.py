@@ -141,3 +141,51 @@ async def test_non_approver_cannot_see_or_decide_approvals(
 
     list_resp = await client.get("/approvals")
     assert list_resp.status_code == 403
+
+
+async def test_queue_lists_task_approvals_with_deal_filter(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    """The task half of the queue — reassignment sublabel and the deal_id
+    filter. Both are built from outer joins to users that are NULL for an
+    unassigned task or a task_delete request, which is exactly where a
+    join rewrite goes wrong quietly.
+    """
+    admin = await create_user(db, "admin@lilkis.in", role="admin")
+    member = await create_user(db, "member@lilkis.in")
+    other = await create_user(db, "other@lilkis.in")
+    deal = await create_deal(db, "AAA", admin.id)
+    unrelated = await create_deal(db, "BBB", admin.id)
+
+    await login(client, "admin@lilkis.in")
+    task = (
+        await client.post(
+            f"/deals/{deal.id}/tasks", json={"title": "Chase the deed", "assignee_id": str(other.id)}
+        )
+    ).json()
+    elsewhere = (
+        await client.post(f"/deals/{unrelated.id}/tasks", json={"title": "Not this one"})
+    ).json()
+
+    # A member can't reassign or delete directly, so both land in the queue.
+    await login(client, "member@lilkis.in")
+    reassign = await client.post(
+        f"/deals/{deal.id}/tasks/{task['id']}/assign", json={"assignee_id": str(member.id)}
+    )
+    assert reassign.status_code == 200, reassign.text
+    assert (await client.request("DELETE", f"/deals/{unrelated.id}/tasks/{elsewhere['id']}")).json()[
+        "status"
+    ] == "delete_requested"
+
+    await login(client, "admin@lilkis.in")
+    queue = (await client.get("/approvals")).json()
+    assert {item["type"] for item in queue} == {"task_reassign", "task_delete"}
+
+    by_type = {item["type"]: item for item in queue}
+    assert by_type["task_reassign"]["item_label"] == "AAA-1 Chase the deed"
+    assert by_type["task_reassign"]["item_sublabel"] == "Other -> Member"
+    assert by_type["task_reassign"]["deal_name"] == deal.name
+    assert by_type["task_delete"]["item_sublabel"] is None
+
+    filtered = (await client.get(f"/approvals?deal_id={deal.id}")).json()
+    assert [item["type"] for item in filtered] == ["task_reassign"]

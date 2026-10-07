@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import current_active_user
+from app.models.deal import Deal
 from app.models.folder import UserFolderPermission
 from app.models.user import User
 
@@ -63,6 +64,30 @@ async def check_folder_access(
         raise HTTPException(status_code=403, detail="Access denied")
     if level == "contribute" and permission == "view":
         raise HTTPException(status_code=403, detail="Access denied")
+
+
+async def require_open_deal(db: AsyncSession, deal_id: UUID) -> Deal:
+    """PRD F3: "Old deals (Successful or Dropped) are read-only. Upload,
+    rename, delete request, task create, task edit and comment are
+    disabled. Download still works."
+
+    This was previously enforced only in upload.py, so the API accepted
+    renames, deletion requests and comments on a closed deal even though
+    the UI hid the controls — exactly the "the frontend won't let them"
+    non-model CLAUDE.md §2.3 rules out. Call this in every write path on
+    a deal-scoped resource.
+
+    allow_uploads_when_closed deliberately does NOT exempt these: PRD F3
+    scopes that flag to uploads only, so upload.py keeps its own check.
+    """
+    deal = await db.get(Deal, deal_id)
+    if deal is None:
+        raise HTTPException(status_code=404, detail="Deal not found")
+    if deal.stage in ("successful", "dropped"):
+        raise HTTPException(
+            status_code=403, detail="This deal is closed. Files can be downloaded but not changed."
+        )
+    return deal
 
 
 async def accessible_folder_ids(db: AsyncSession, user: User) -> list[UUID] | None:

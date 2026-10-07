@@ -3,6 +3,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -221,38 +222,47 @@ async def set_permission(
 async def list_archive(
     db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)
 ) -> list[ArchiveItem]:
-    docs = list(
-        await db.scalars(
-            select(Document).where(Document.status == "archived").order_by(Document.updated_at.desc())
+    # One query, not five per row. The reason comes from the
+    # approval_requests row that archived it (ARCHITECTURE.md's documents
+    # table has no reason column) — a lateral subquery picks the latest
+    # one per document, since a file can be delete-requested, restored and
+    # delete-requested again.
+    Uploader = aliased(User)
+    Approver = aliased(User)
+    latest_reason = (
+        select(ApprovalRequest.requester_note)
+        .where(
+            ApprovalRequest.type == "document_delete",
+            ApprovalRequest.document_id == Document.id,
         )
+        .order_by(ApprovalRequest.created_at.desc())
+        .limit(1)
+        .correlate(Document)
+        .scalar_subquery()
     )
-    items = []
-    for doc in docs:
-        deal = await db.get(Deal, doc.deal_id)
-        folder = await db.get(FolderTemplate, doc.folder_id)
-        deleted_by = await db.get(User, doc.uploaded_by)
-        approved_by = await db.get(User, doc.approved_by) if doc.approved_by else None
-        # Reason comes from the approval_requests row that archived it —
-        # ARCHITECTURE.md's documents table has no reason column itself.
-        approval = await db.scalar(
-            select(ApprovalRequest)
-            .where(ApprovalRequest.type == "document_delete", ApprovalRequest.document_id == doc.id)
-            .order_by(ApprovalRequest.created_at.desc())
+    rows = await db.execute(
+        select(Document, Deal.name, FolderTemplate.name, Uploader.display_name, Approver.display_name, latest_reason)
+        .join(Deal, Deal.id == Document.deal_id)
+        .join(FolderTemplate, FolderTemplate.id == Document.folder_id)
+        .join(Uploader, Uploader.id == Document.uploaded_by)
+        .outerjoin(Approver, Approver.id == Document.approved_by)
+        .where(Document.status == "archived")
+        .order_by(Document.updated_at.desc())
+    )
+    return [
+        ArchiveItem(
+            id=doc.id,
+            display_name=doc.display_name,
+            deal_id=doc.deal_id,
+            deal_name=deal_name,
+            folder_name=folder_name,
+            deleted_by_name=uploader_name,
+            approved_by_name=approver_name,
+            deleted_at=doc.updated_at,
+            reason=reason,
         )
-        items.append(
-            ArchiveItem(
-                id=doc.id,
-                display_name=doc.display_name,
-                deal_id=doc.deal_id,
-                deal_name=deal.name if deal else "",
-                folder_name=folder.name if folder else "",
-                deleted_by_name=deleted_by.display_name if deleted_by else None,
-                approved_by_name=approved_by.display_name if approved_by else None,
-                deleted_at=doc.updated_at,
-                reason=(approval.requester_note if approval else None),
-            )
-        )
-    return items
+        for doc, deal_name, folder_name, uploader_name, approver_name, reason in rows
+    ]
 
 
 @router.post("/archive/{doc_id}/restore")
@@ -295,7 +305,12 @@ async def purge_document(
         raise HTTPException(status_code=404, detail="Archived document not found")
 
     delete_object(doc.object_key)
-    doc.status = "rejected"  # closest existing status meaning "gone, not active, not archived"
+    # PRD §8 names this state: "purged means the database row is kept and
+    # the object deleted". It used to write 'rejected', the closest value
+    # the CHECK constraint then allowed, which dropped the file out of the
+    # Archive and back into the deal's document list as an ordinary row
+    # whose object_key no longer resolved.
+    doc.status = "purged"
     db.add(
         AuditLog(
             actor_id=admin.id,

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi_users.authentication.strategy.db import DatabaseStrategy
 from sqlalchemy import func, select
@@ -30,9 +30,13 @@ FAILED_LOGIN_THRESHOLD = 5
 async def logout(
     user_token: tuple[User, str] = Depends(fastapi_users.authenticator.current_user_token(active=True)),
     strategy: DatabaseStrategy = Depends(get_database_strategy),
-) -> None:
+) -> Response:
     user, token = user_token
-    await auth_backend.logout(strategy, user, token)
+    # Returning the backend's response matters: it carries the Set-Cookie
+    # that clears lilkis_session. Discarding it (as this did) still killed
+    # the DB token, so the session was genuinely over — but the browser
+    # kept sending a dead cookie on every request until it aged out.
+    return await auth_backend.logout(strategy, user, token)
 
 
 @router.post("/login")

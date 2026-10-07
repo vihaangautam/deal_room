@@ -7,7 +7,12 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.deps import accessible_folder_ids, check_folder_access, require_password_set
+from app.deps import (
+    accessible_folder_ids,
+    check_folder_access,
+    require_open_deal,
+    require_password_set,
+)
 from app.models.approval import ApprovalRequest
 from app.models.audit import AuditLog
 from app.models.document import Document
@@ -26,7 +31,13 @@ async def list_documents(
 ) -> list[DocumentRead]:
     folder_ids = await accessible_folder_ids(db, user)
 
-    conditions = [Document.deal_id == deal_id, Document.status != "archived"]
+    # archived lives in the Archive (PRD F10); purged and failed have no
+    # object behind them any more, so a row for either in the deal's file
+    # table would only offer a download that 404s.
+    conditions = [
+        Document.deal_id == deal_id,
+        Document.status.notin_(("archived", "purged", "failed")),
+    ]
     if folder_ids is not None:
         conditions.append(Document.folder_id.in_(folder_ids))
 
@@ -102,6 +113,7 @@ async def rename_document(
     if doc.status != "active":
         raise HTTPException(status_code=409, detail="Only active documents can be renamed")
 
+    await require_open_deal(db, deal_id)  # PRD F3
     await check_folder_access(db, user, doc.folder_id, "contribute")
 
     ext = Path(doc.display_name).suffix  # locked — PRD F5
@@ -148,6 +160,7 @@ async def request_delete(
     if doc.status != "active":
         raise HTTPException(status_code=409, detail="Only active documents can be deleted")
 
+    await require_open_deal(db, deal_id)  # PRD F3
     await check_folder_access(db, user, doc.folder_id, "contribute")
 
     ip = request.client.host if request.client else None

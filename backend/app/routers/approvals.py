@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -81,7 +82,10 @@ async def _apply_decision(
     if approval.type == "document_upload":
         doc = await db.get(Document, approval.document_id)
         if doc is None:
-            return
+            # Not a silent skip: returning here would commit
+            # approval.status without ever reaching the AuditLog below,
+            # and CLAUDE.md §2.4 wants an audit row for every decision.
+            raise HTTPException(status_code=404, detail="The item this approval refers to is gone")
         if action == "approve":
             if doc.integrity_check_failed:
                 # PRD §10: a flagged document can only be rejected.
@@ -100,7 +104,10 @@ async def _apply_decision(
     elif approval.type == "document_delete":
         doc = await db.get(Document, approval.document_id)
         if doc is None:
-            return
+            # Not a silent skip: returning here would commit
+            # approval.status without ever reaching the AuditLog below,
+            # and CLAUDE.md §2.4 wants an audit row for every decision.
+            raise HTTPException(status_code=404, detail="The item this approval refers to is gone")
         # PRD §8 document state machine: approve -> archived, reject ->
         # back to active (the file was live the whole time it was
         # delete_requested).
@@ -109,7 +116,7 @@ async def _apply_decision(
     elif approval.type == "task_reassign":
         task = await db.get(Task, approval.task_id)
         if task is None:
-            return
+            raise HTTPException(status_code=404, detail="The item this approval refers to is gone")
         if action == "approve":
             task.assigned_to = approval.proposed_assignee
             # PRD F8: "the requester becomes 'assigned by'".
@@ -120,7 +127,7 @@ async def _apply_decision(
     elif approval.type == "task_delete":
         task = await db.get(Task, approval.task_id)
         if task is None:
-            return
+            raise HTTPException(status_code=404, detail="The item this approval refers to is gone")
         if action == "approve":
             task.deleted = True
 
@@ -143,67 +150,106 @@ async def list_approvals(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_approver),
 ) -> list[ApprovalItem]:
-    query = select(ApprovalRequest).where(ApprovalRequest.status == "pending")
+    # Two queries total. This used to run roughly five per pending row
+    # (requester, document or task, deal, folder or both assignees), and
+    # the deal_id filter was applied in Python afterwards, so a filtered
+    # view still paid for every row in the queue.
+    base = [ApprovalRequest.status == "pending"]
     if requested_by:
-        query = query.where(ApprovalRequest.requested_by == requested_by)
+        base.append(ApprovalRequest.requested_by == requested_by)
     if type:
-        query = query.where(ApprovalRequest.type == type)
-    query = query.order_by(ApprovalRequest.created_at.desc())
+        base.append(ApprovalRequest.type == type)
 
-    items: list[ApprovalItem] = []
-    for approval in await db.scalars(query):
-        requester = await db.get(User, approval.requested_by)
-        requester_name = requester.display_name if requester else ""
+    Requester = aliased(User)
+    doc_query = (
+        select(
+            ApprovalRequest,
+            Requester.display_name,
+            Document.display_name,
+            Deal.id,
+            Deal.name,
+            FolderTemplate.name,
+        )
+        .join(Requester, Requester.id == ApprovalRequest.requested_by)
+        .join(Document, Document.id == ApprovalRequest.document_id)
+        .join(Deal, Deal.id == Document.deal_id)
+        .join(FolderTemplate, FolderTemplate.id == Document.folder_id)
+        .where(*base, ApprovalRequest.type.in_(("document_upload", "document_delete")))
+    )
+    if deal_id:
+        doc_query = doc_query.where(Deal.id == deal_id)
 
-        if approval.type in ("document_upload", "document_delete"):
-            doc = await db.get(Document, approval.document_id)
-            if doc is None:
-                continue
-            deal = await db.get(Deal, doc.deal_id)
-            if deal is None or (deal_id and deal.id != deal_id):
-                continue
-            folder = await db.get(FolderTemplate, doc.folder_id)
-            items.append(
-                ApprovalItem(
-                    id=approval.id,
-                    type=approval.type,
-                    deal_id=deal.id,
-                    deal_name=deal.name,
-                    item_label=doc.display_name,
-                    item_sublabel=folder.name if folder else None,
-                    requested_by_name=requester_name,
-                    requested_at=approval.created_at,
-                    note=approval.requester_note,
-                )
+    items: list[ApprovalItem] = [
+        ApprovalItem(
+            id=approval.id,
+            type=approval.type,
+            deal_id=d_id,
+            deal_name=deal_name,
+            item_label=doc_name,
+            item_sublabel=folder_name,
+            requested_by_name=requester_name,
+            requested_at=approval.created_at,
+            note=approval.requester_note,
+        )
+        for approval, requester_name, doc_name, d_id, deal_name, folder_name in await db.execute(
+            doc_query
+        )
+    ]
+
+    Current = aliased(User)
+    Proposed = aliased(User)
+    task_query = (
+        select(
+            ApprovalRequest,
+            Requester.display_name,
+            Deal.id,
+            Deal.name,
+            Deal.short_code,
+            Task.sequence_number,
+            Task.title,
+            Current.display_name,
+            Proposed.display_name,
+        )
+        .join(Requester, Requester.id == ApprovalRequest.requested_by)
+        .join(Task, Task.id == ApprovalRequest.task_id)
+        .join(Deal, Deal.id == Task.deal_id)
+        .outerjoin(Current, Current.id == Task.assigned_to)
+        .outerjoin(Proposed, Proposed.id == ApprovalRequest.proposed_assignee)
+        .where(*base, ApprovalRequest.type.in_(("task_reassign", "task_delete")))
+    )
+    if deal_id:
+        task_query = task_query.where(Deal.id == deal_id)
+
+    for (
+        approval,
+        requester_name,
+        d_id,
+        deal_name,
+        short_code,
+        sequence_number,
+        title,
+        current_name,
+        proposed_name,
+    ) in await db.execute(task_query):
+        items.append(
+            ApprovalItem(
+                id=approval.id,
+                type=approval.type,
+                deal_id=d_id,
+                deal_name=deal_name,
+                item_label=f"{short_code}-{sequence_number} {title}",
+                item_sublabel=(
+                    f"{current_name or 'Unassigned'} -> {proposed_name or ''}"
+                    if approval.type == "task_reassign"
+                    else None
+                ),
+                requested_by_name=requester_name,
+                requested_at=approval.created_at,
+                note=approval.requester_note,
             )
-        else:  # task_reassign, task_delete
-            task = await db.get(Task, approval.task_id)
-            if task is None:
-                continue
-            deal = await db.get(Deal, task.deal_id)
-            if deal is None or (deal_id and deal.id != deal_id):
-                continue
-            sublabel = None
-            if approval.type == "task_reassign":
-                current = await db.get(User, task.assigned_to) if task.assigned_to else None
-                proposed = await db.get(User, approval.proposed_assignee)
-                sublabel = (
-                    f"{current.display_name if current else 'Unassigned'} -> "
-                    f"{proposed.display_name if proposed else ''}"
-                )
-            items.append(
-                ApprovalItem(
-                    id=approval.id,
-                    type=approval.type,
-                    deal_id=deal.id,
-                    deal_name=deal.name,
-                    item_label=f"{deal.short_code}-{task.sequence_number} {task.title}",
-                    item_sublabel=sublabel,
-                    requested_by_name=requester_name,
-                    requested_at=approval.created_at,
-                    note=approval.requester_note,
-                )
-            )
+        )
+
+    items.sort(key=lambda item: item.requested_at, reverse=True)
     return items
 
 

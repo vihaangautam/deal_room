@@ -128,10 +128,15 @@ CREATE TABLE documents (
     size_bytes       BIGINT NOT NULL,
     sha256           TEXT NOT NULL,
     object_key       TEXT NOT NULL UNIQUE,
+    -- PRD §8's full document state machine. 'purged' and 'failed' are
+    -- terminal states in that diagram; omitting them forced admin.py to
+    -- record a purged file as 'rejected', which made it reappear in the
+    -- deal's document list pointing at a deleted object.
     status           TEXT NOT NULL DEFAULT 'uploading'
                      CHECK (status IN (
                        'uploading', 'pending', 'active',
-                       'delete_requested', 'archived', 'rejected'
+                       'delete_requested', 'archived', 'rejected',
+                       'purged', 'failed'
                      )),
     version          INTEGER NOT NULL DEFAULT 1,
     -- PRD §10: a server-side hash mismatch routes to the approval queue

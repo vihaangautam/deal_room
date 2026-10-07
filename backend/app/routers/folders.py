@@ -72,7 +72,13 @@ async def update_folder(
     if folder is None:
         raise HTTPException(status_code=404, detail="Folder not found")
 
-    if body.name is not None:
+    if body.name is not None and body.name != folder.name:
+        # folder_templates.name is UNIQUE, so without this the rename
+        # surfaced as an IntegrityError 500 instead of the same 409
+        # create_folder returns.
+        clash = await db.scalar(select(FolderTemplate).where(FolderTemplate.name == body.name))
+        if clash:
+            raise HTTPException(status_code=409, detail="A folder with this name already exists")
         folder.name = body.name
     if body.display_order is not None:
         folder.display_order = body.display_order

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.deps import require_password_set
+from app.deps import require_open_deal, require_password_set
 from app.models.comment import Comment
 from app.models.user import User
 from app.schemas.comment import CommentCreate, CommentRead, CommentUpdate
@@ -42,6 +42,8 @@ async def _list(db: AsyncSession, deal_id: uuid.UUID, task_id: uuid.UUID | None)
 async def _create(
     db: AsyncSession, deal_id: uuid.UUID, task_id: uuid.UUID | None, body: CommentCreate, user: User
 ) -> CommentRead:
+    await require_open_deal(db, deal_id)  # PRD F3: no commenting on a closed deal
+
     if body.parent_id:
         parent = await db.get(Comment, body.parent_id)
         if parent is None or parent.deal_id != deal_id or parent.task_id != task_id:

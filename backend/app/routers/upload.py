@@ -144,12 +144,20 @@ async def complete_upload(
     if not chunk_files:
         raise HTTPException(status_code=400, detail="No chunks were received")
 
+    # Assembled on disk and streamed to S3, never held in memory. PRD F5
+    # allows 2 GB per file, and the previous bytearray — plus the
+    # bytes(assembled) copy handed to boto3 — peaked at roughly 4 GB of
+    # RSS per concurrent upload, which the VM in ARCHITECTURE.md §4 does
+    # not have. Hashing happens in the same pass, so this reads each
+    # chunk once either way.
+    assembled_path = chunk_dir / "assembled"  # not matched by glob("chunk_*")
     hasher = hashlib.sha256()
-    assembled = bytearray()
-    for chunk_file in chunk_files:
-        data = chunk_file.read_bytes()
-        hasher.update(data)
-        assembled.extend(data)
+    with assembled_path.open("wb") as out:
+        for chunk_file in chunk_files:
+            with chunk_file.open("rb") as src:
+                while block := src.read(1024 * 1024):
+                    hasher.update(block)
+                    out.write(block)
 
     # Chunks are only deleted after everything below succeeds (put_object
     # + commit) — if either fails, the client can retry POST .../complete
@@ -159,14 +167,18 @@ async def complete_upload(
     if hasher.hexdigest() != doc.sha256:
         # PRD §10: flagged for approvers, who can only reject it — never
         # an automatic rejection (CLAUDE.md #7: the system flags, humans
-        # decide). Still goes through the normal approval-request path
-        # below so it reaches the queue.
+        # decide). Nothing is written to storage in this branch.
         doc.integrity_check_failed = True
     else:
-        put_object(doc.object_key, bytes(assembled), doc.mime_type)
+        with assembled_path.open("rb") as body:
+            put_object(doc.object_key, body, doc.mime_type)
 
-    if user.can_approve:
-        # PRD F5: an approver's own uploads are auto-approved.
+    if user.can_approve and not doc.integrity_check_failed:
+        # PRD F5: an approver's own uploads are auto-approved — but a hash
+        # mismatch overrides that. Auto-approving a flagged upload marked
+        # it 'active' with nothing behind its object_key and never created
+        # an approval request, so the file was permanently undownloadable
+        # and no human ever saw the flag PRD §10 raises it for.
         doc.status = "active"
         doc.approved_by = user.id
         db.add(

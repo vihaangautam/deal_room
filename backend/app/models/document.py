@@ -7,6 +7,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
+# PRD §8's document state machine, in full. 'purged' ("the database row
+# is kept and the object deleted") and 'failed' (a 24h-stale upload) are
+# both terminal states in that diagram but were missing here, so
+# admin.py's purge had to mislabel purged files as 'rejected' — which put
+# them back in the deal's document list with a dead object key. Only
+# 'purged' is written today; 'failed' lands with the stale-upload job.
 DOCUMENT_STATUSES = (
     "uploading",
     "pending",
@@ -14,6 +20,8 @@ DOCUMENT_STATUSES = (
     "delete_requested",
     "archived",
     "rejected",
+    "purged",
+    "failed",
 )
 
 

@@ -6,7 +6,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.deps import accessible_folder_ids, check_folder_access, require_password_set
+from app.deps import (
+    accessible_folder_ids,
+    check_folder_access,
+    require_open_deal,
+    require_password_set,
+)
 from app.models.approval import ApprovalRequest
 from app.models.audit import AuditLog
 from app.models.deal import Deal
@@ -43,6 +48,21 @@ async def _get_running_deal(db: AsyncSession, deal_id: uuid.UUID) -> Deal:
     if deal.stage != "running":
         raise HTTPException(status_code=404, detail="tasks_disabled_for_stage")
     return deal
+
+
+async def _get_open_task(db: AsyncSession, deal_id: uuid.UUID, task_id: uuid.UUID) -> Task:
+    """Every task write path needs the same three checks: the task exists,
+    it belongs to this deal, and the deal is still open — PRD F3 names
+    "task edit" among the things a Successful or Dropped deal disables, and
+    none of these handlers enforced that before. Keeping it here rather
+    than in each handler is why a closed deal can't be edited through any
+    of them. Reads (get_task, list) deliberately don't call this: F3 makes
+    a closed deal read-only, not invisible."""
+    task = await db.get(Task, task_id)
+    if task is None or task.deleted or task.deal_id != deal_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    await require_open_deal(db, deal_id)
+    return task
 
 
 @router.get("/deals/{deal_id}/tasks", response_model=list[TaskListItem])
@@ -191,21 +211,27 @@ async def _task_detail(db: AsyncSession, task_id: uuid.UUID, user: User) -> Task
     folder_ids = await accessible_folder_ids(db, user)
     attachments: list[TaskAttachmentItem] = []
     attachment_rows = await db.execute(
-        select(Document.id, Document.display_name, Document.folder_id, Document.status)
+        select(
+            Document.id,
+            Document.display_name,
+            Document.folder_id,
+            Document.status,
+            FolderTemplate.name,
+        )
         .join(TaskAttachment, TaskAttachment.document_id == Document.id)
+        .join(FolderTemplate, FolderTemplate.id == Document.folder_id)
         .where(TaskAttachment.task_id == task_id)
     )
-    for doc_id, display_name, folder_id, status in attachment_rows:
+    for doc_id, display_name, folder_id, status, folder_name in attachment_rows:
         if folder_ids is not None and folder_id not in folder_ids:
             attachments.append(TaskAttachmentItem(document_id=doc_id, restricted=True))
             continue
-        folder = await db.get(FolderTemplate, folder_id)
         attachments.append(
             TaskAttachmentItem(
                 document_id=doc_id,
                 restricted=False,
                 display_name=display_name,
-                folder_name=folder.name if folder else None,
+                folder_name=folder_name,
                 status=status,
             )
         )
@@ -265,9 +291,7 @@ async def update_task(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_password_set),
 ) -> TaskDetail:
-    task = await db.get(Task, task_id)
-    if task is None or task.deleted or task.deal_id != deal_id:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = await _get_open_task(db, deal_id, task_id)
     if not _can_edit_description(task, user):
         raise HTTPException(
             status_code=403,
@@ -296,9 +320,7 @@ async def assign_task(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_password_set),
 ) -> TaskDetail:
-    task = await db.get(Task, task_id)
-    if task is None or task.deleted or task.deal_id != deal_id:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = await _get_open_task(db, deal_id, task_id)
 
     ip = request.client.host if request.client else None
 
@@ -391,9 +413,7 @@ async def change_status(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_password_set),
 ) -> TaskDetail:
-    task = await db.get(Task, task_id)
-    if task is None or task.deleted or task.deal_id != deal_id:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = await _get_open_task(db, deal_id, task_id)
     if not _can_change_status(task, user, body.status):
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -411,9 +431,7 @@ async def submit_task(
 ) -> TaskDetail:
     """The single "Mark as done" / "Submit for approval" button (DESIGN.md
     §5.7) — the system decides which, per PRD F8's exact rule."""
-    task = await db.get(Task, task_id)
-    if task is None or task.deleted or task.deal_id != deal_id:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = await _get_open_task(db, deal_id, task_id)
     if user.id not in (task.assigned_to, task.assigned_by) and user.role != "admin":
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -439,9 +457,7 @@ async def request_delete_task(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_password_set),
 ) -> dict[str, str]:
-    task = await db.get(Task, task_id)
-    if task is None or task.deleted or task.deal_id != deal_id:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = await _get_open_task(db, deal_id, task_id)
 
     ip = request.client.host if request.client else None
 
@@ -492,9 +508,7 @@ async def link_attachment(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_password_set),
 ) -> TaskDetail:
-    task = await db.get(Task, task_id)
-    if task is None or task.deleted or task.deal_id != deal_id:
-        raise HTTPException(status_code=404, detail="Task not found")
+    await _get_open_task(db, deal_id, task_id)
 
     doc = await db.get(Document, body.document_id)
     if doc is None or doc.deal_id != deal_id or doc.status != "active":
@@ -531,9 +545,7 @@ async def init_attachment_upload(
     immediately — "linked automatically". Chunk/complete are the same
     endpoints as a normal upload (routers/upload.py); they don't need to
     know about tasks at all, only this init step does."""
-    task = await db.get(Task, task_id)
-    if task is None or task.deleted or task.deal_id != deal_id:
-        raise HTTPException(status_code=404, detail="Task not found")
+    await _get_open_task(db, deal_id, task_id)
 
     await check_folder_access(db, user, body.folder_id, "contribute")
 
