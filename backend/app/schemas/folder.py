@@ -14,9 +14,9 @@ class FolderRead(BaseModel):
 class FolderCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     # PRD F4: admin picks the default access level for current members
-    # when creating a folder. Applied to every existing member in the
-    # router, not stored on the folder itself.
-    default_access: str = Field(default="view", pattern="^(none|view)$")
+    # when creating a folder. New folders start from 'none' by default
+    # so admin explicitly configures access per member in Users & permissions.
+    default_access: str = Field(default="none", pattern="^(none|view)$")
 
 
 class FolderUpdate(BaseModel):

@@ -20,12 +20,13 @@ import type { Folder } from "@/api/types"
 function AddFolderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const createFolder = useCreateFolder()
   const [name, setName] = useState("")
-  const [defaultAccess, setDefaultAccess] = useState<"none" | "view">("view")
+  const [defaultAccess, setDefaultAccess] = useState<"none" | "view">("none")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     await createFolder.mutateAsync({ name, default_access: defaultAccess })
     setName("")
+    setDefaultAccess("none")
     onOpenChange(false)
   }
 
@@ -38,24 +39,26 @@ function AddFolderDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
         <Field
           label="Starting access for members"
           htmlFor="default-access"
-          helper="You can change access per person afterwards in Users & permissions."
+          helper="New folders start with None access by default. Samir can change access to View or Contribute per person in Users & permissions."
         >
           <div className="flex gap-4">
             <label className="flex items-center gap-1.5 text-body text-text-primary">
               <input
                 type="radio"
-                checked={defaultAccess === "view"}
-                onChange={() => setDefaultAccess("view")}
-              />
-              View
-            </label>
-            <label className="flex items-center gap-1.5 text-body text-text-primary">
-              <input
-                type="radio"
+                name="starting-access"
                 checked={defaultAccess === "none"}
                 onChange={() => setDefaultAccess("none")}
               />
               None
+            </label>
+            <label className="flex items-center gap-1.5 text-body text-text-primary">
+              <input
+                type="radio"
+                name="starting-access"
+                checked={defaultAccess === "view"}
+                onChange={() => setDefaultAccess("view")}
+              />
+              View
             </label>
           </div>
         </Field>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import { FileSpreadsheet, FileText, Lock, Upload } from "lucide-react"
 import { useDeal } from "@/api/deals"
 import { useDocuments, useRenameDocument, useRequestDeleteDocument, documentDownloadUrl } from "@/api/documents"
@@ -182,7 +182,7 @@ function FileRow({
         pending={requestDelete.isPending}
         onConfirm={(reason) => {
           requestDelete.mutate(
-            { docId: doc.id, reason: reason || undefined },
+            { docId: doc.id, ...(reason ? { reason } : {}) },
             {
               // An approver's own request archives at once (PRD §7), so
               // the two outcomes need different words.

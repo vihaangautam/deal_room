@@ -25,12 +25,21 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   // it, and neither should be run through JSON.stringify.
   const isRawBody = body instanceof FormData || body instanceof URLSearchParams
 
-  const res = await fetch(`${BASE}${path}`, {
+  const init: RequestInit = {
     credentials: "include", // always send the session cookie
-    headers: isRawBody ? headers : { "Content-Type": "application/json", ...headers },
-    body: isRawBody ? body : body !== undefined ? JSON.stringify(body) : undefined,
     ...rest,
-  })
+  }
+  const effectiveHeaders = isRawBody ? headers : { "Content-Type": "application/json", ...headers }
+  if (effectiveHeaders !== undefined) {
+    init.headers = effectiveHeaders
+  }
+  if (isRawBody) {
+    init.body = body
+  } else if (body !== undefined) {
+    init.body = JSON.stringify(body)
+  }
+
+  const res = await fetch(`${BASE}${path}`, init)
 
   if (res.status === 204) {
     return undefined as T

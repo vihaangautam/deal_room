@@ -29,7 +29,7 @@ function NavRow({
   to: string
   icon: typeof Layers
   label: string
-  count?: number
+  count?: number | undefined
   isApprovalBadge?: boolean
   active: boolean
 }) {
@@ -180,7 +180,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
         </nav>
 
-        <main className="ml-[232px] flex-1">{children}</main>
+        <main className="ml-[232px] flex-1 min-w-0">{children}</main>
       </div>
     </div>
   )

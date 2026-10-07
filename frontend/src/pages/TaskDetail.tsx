@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { MultiFileUploadDialog } from "@/components/MultiFileUpload"
 import { Menu, RowMenuItem } from "@/components/ui/dropdown-menu"
-import { formatDate, formatDateTime, initials } from "@/lib/utils"
+import { formatDate, formatDateTime } from "@/lib/utils"
 import type { TaskAttachmentItem } from "@/api/types"
 
 function AttachmentRow({ attachment }: { attachment: TaskAttachmentItem }) {

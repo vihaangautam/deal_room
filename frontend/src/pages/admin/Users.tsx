@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Field } from "@/components/ui/field"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
-import { cn, formatDate } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import type { AccessLevel, UserAdmin } from "@/api/types"
 
 const ACCESS_LEVELS: AccessLevel[] = ["none", "view", "contribute"]
@@ -194,36 +194,49 @@ function PermissionMatrixTab() {
   }
 
   return (
-    <div className="overflow-x-auto rounded-md border border-border">
-      <table className="w-full">
+    <div className="w-full max-w-full overflow-x-auto rounded-md border border-border">
+      <table className="w-max min-w-full border-separate border-spacing-0">
         <thead>
-          <tr className="h-9 bg-surface-sunken text-left text-label text-text-tertiary">
-            <th className="sticky left-0 z-10 w-[200px] bg-surface-sunken px-4 font-medium">User</th>
+          <tr className="h-10 bg-surface-sunken text-left text-label text-text-tertiary">
+            <th className="sticky left-0 z-20 w-[180px] min-w-[180px] bg-surface-sunken px-4 font-medium border-b border-r border-border shadow-[1px_0_0_0_#EEF0EE]">
+              User
+            </th>
             {folders?.map((f) => (
-              <th key={f.id} className="min-w-[120px] px-2 text-center font-medium">
-                {f.name}
+              <th
+                key={f.id}
+                className="min-w-[160px] max-w-[220px] px-3 py-2 text-center font-medium border-b border-r border-border last:border-r-0"
+              >
+                <span className="block truncate text-label text-text-primary" title={f.name}>
+                  {f.name}
+                </span>
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {users?.map((user) => (
-            <tr key={user.id} className="h-10 border-t border-border">
-              <td className="sticky left-0 z-10 bg-surface px-4 text-table font-medium text-text-primary">
+            <tr key={user.id} className="h-10 hover:bg-surface-hover">
+              <td className="sticky left-0 z-10 w-[180px] min-w-[180px] bg-surface px-4 text-table font-medium text-text-primary border-b border-r border-border shadow-[1px_0_0_0_#EEF0EE]">
                 {user.display_name}
               </td>
               {folders?.map((folder) => {
                 if (user.role === "admin") {
                   return (
-                    <td key={folder.id} className="px-2 text-center text-meta text-text-tertiary">
+                    <td
+                      key={folder.id}
+                      className="min-w-[160px] px-3 py-2 text-center text-meta text-text-tertiary border-b border-r border-border last:border-r-0"
+                    >
                       Full access
                     </td>
                   )
                 }
                 const level = levelFor(user.id, folder.id)
                 return (
-                  <td key={folder.id} className="px-2 py-1">
-                    <div className="flex justify-center gap-0.5">
+                  <td
+                    key={folder.id}
+                    className="min-w-[160px] px-3 py-2 text-center border-b border-r border-border last:border-r-0"
+                  >
+                    <div className="flex justify-center gap-1">
                       {ACCESS_LEVELS.map((l) => (
                         <button
                           key={l}
@@ -233,8 +246,8 @@ function PermissionMatrixTab() {
                             setPermission.mutate({ userId: user.id, folderId: folder.id, accessLevel: l })
                           }
                           className={cn(
-                            "h-6 w-6 rounded text-[10px] font-semibold",
-                            level === l ? ACCESS_STYLE[l] : "bg-surface-sunken text-text-tertiary",
+                            "h-6 w-6 rounded text-[10px] font-semibold transition-colors",
+                            level === l ? ACCESS_STYLE[l] : "bg-surface-sunken text-text-tertiary hover:bg-[#E2E6E2]",
                           )}
                         >
                           {l[0]?.toUpperCase()}

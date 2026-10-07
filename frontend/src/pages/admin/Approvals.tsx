@@ -50,7 +50,7 @@ function RejectDialog({
 export function Approvals() {
   const [typeFilter, setTypeFilter] = useState<ApprovalType | "">("")
   const [dealFilter, setDealFilter] = useState("")
-  const { data: approvals, isLoading } = useApprovals({ type: typeFilter || undefined })
+  const { data: approvals, isLoading } = useApprovals(typeFilter ? { type: typeFilter } : undefined)
   const bulkAction = useBulkApprovalAction()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [rejectOpen, setRejectOpen] = useState(false)
