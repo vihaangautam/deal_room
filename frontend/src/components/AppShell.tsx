@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { type ReactNode } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   Archive as ArchiveIcon,
@@ -15,6 +15,7 @@ import { useApprovals } from "@/api/approvals"
 import { useDeals } from "@/api/deals"
 import { useMyTasks } from "@/api/tasks"
 import { useAuthStore } from "@/stores/auth"
+import { Menu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { cn, initials } from "@/lib/utils"
 
 function NavRow({
@@ -64,7 +65,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
   const user = useAuthStore((s) => s.user)
   const clear = useAuthStore((s) => s.clear)
-  const [menuOpen, setMenuOpen] = useState(false)
 
   const { data: deals } = useDeals()
   const { data: myTasks } = useMyTasks()
@@ -72,10 +72,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isAdmin = user?.role === "admin"
 
   async function handleLogout() {
-    await logout()
-    clear()
-    qc.clear()
-    navigate("/login")
+    try {
+      await logout()
+    } finally {
+      // An already-expired session makes /auth/logout itself fail, and
+      // without this the throw skipped the clear and left the user
+      // staring at a shell they could not leave.
+      clear()
+      qc.clear()
+      navigate("/login")
+    }
   }
 
   return (
@@ -88,44 +94,28 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="text-title-section text-text-primary">Lilkis Deal Room</span>
         </div>
 
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2"
-          >
-            <span
-              className="flex h-6 w-6 items-center justify-center rounded-full bg-pill-neutral-bg text-[11px] font-semibold text-text-primary"
-              aria-hidden
-            >
-              {user ? initials(user.display_name) : ""}
-            </span>
-            <span className="text-left">
-              <span className="block text-body-strong text-text-primary">{user?.display_name}</span>
-              <span className="block text-meta text-text-tertiary">
-                {isAdmin ? "Admin" : "Member"}
+        <Menu
+          align="end"
+          trigger={
+            <button type="button" className="flex items-center gap-2">
+              <span
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-pill-neutral-bg text-[11px] font-semibold text-text-primary"
+                aria-hidden
+              >
+                {user ? initials(user.display_name) : ""}
               </span>
-            </span>
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-10 w-44 rounded-md border border-border bg-surface py-1 shadow-[0_4px_12px_rgba(16,24,16,.08),0_0_0_1px_#E3E6E3]">
-              <Link
-                to="/change-password"
-                onClick={() => setMenuOpen(false)}
-                className="block px-3 py-2 text-body text-text-primary hover:bg-surface-hover"
-              >
-                Change password
-              </Link>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="block w-full px-3 py-2 text-left text-body text-text-primary hover:bg-surface-hover"
-              >
-                Log out
-              </button>
-            </div>
-          )}
-        </div>
+              <span className="text-left">
+                <span className="block text-body-strong text-text-primary">{user?.display_name}</span>
+                <span className="block text-meta text-text-tertiary">
+                  {isAdmin ? "Admin" : "Member"}
+                </span>
+              </span>
+            </button>
+          }
+        >
+          <RowMenuItem onSelect={() => navigate("/change-password")}>Change password</RowMenuItem>
+          <RowMenuItem onSelect={handleLogout}>Log out</RowMenuItem>
+        </Menu>
       </header>
 
       <div className="flex">

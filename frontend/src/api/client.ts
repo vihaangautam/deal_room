@@ -1,6 +1,8 @@
 // CLAUDE.md §6.1/6.4: every API call goes through this wrapper. No raw
 // fetch() calls in components.
 
+import { useAuthStore } from "@/stores/auth"
+
 const BASE = import.meta.env.VITE_API_URL as string
 
 export class ApiError extends Error {
@@ -38,6 +40,13 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   const payload = isJson ? await res.json().catch(() => undefined) : undefined
 
   if (!res.ok) {
+    // A 12-hour session (PRD F1) means a tab left open overnight wakes up
+    // unauthenticated. App.tsx only calls /auth/me on mount, so without
+    // this the user sat on a page where every query failed instead of
+    // being sent back to the login screen.
+    if (res.status === 401) {
+      useAuthStore.getState().clear()
+    }
     throw new ApiError(res.status, payload?.detail ?? "Couldn't reach the server. Check your connection and try again.")
   }
 

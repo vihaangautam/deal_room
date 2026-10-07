@@ -11,54 +11,17 @@ import {
   useUpdateTask,
 } from "@/api/tasks"
 import { useCreateTaskComment, useDeleteComment, useEditComment, useTaskComments } from "@/api/comments"
+import { useDeal } from "@/api/deals"
 import { useDocuments } from "@/api/documents"
 import { useUsers } from "@/api/users"
 import { useAuthStore } from "@/stores/auth"
 import { TaskStatusPill, NeedsAttentionPill, DocumentStatusPill } from "@/components/StatusPill"
 import { Button } from "@/components/ui/button"
+import { Menu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { formatDate, formatDateTime, initials } from "@/lib/utils"
 import type { TaskAttachmentItem } from "@/api/types"
 
 const EDIT_WINDOW_MS = 15 * 60 * 1000
-
-function AssigneePicker({
-  users,
-  excludeUserId,
-  onPick,
-  trigger,
-}: {
-  users: { id: string; display_name: string }[]
-  excludeUserId: string | null
-  onPick: (userId: string) => void
-  trigger: React.ReactNode
-}) {
-  const [open, setOpen] = useState(false)
-  const choices = users.filter((u) => u.id !== excludeUserId)
-  return (
-    <div className="relative inline-block">
-      <button type="button" onClick={() => setOpen((v) => !v)}>
-        {trigger}
-      </button>
-      {open && (
-        <div className="absolute left-0 top-6 z-10 max-h-48 w-48 overflow-y-auto rounded-md border border-border bg-surface py-1 shadow-[0_4px_12px_rgba(16,24,16,.08),0_0_0_1px_#E3E6E3]">
-          {choices.map((u) => (
-            <button
-              key={u.id}
-              type="button"
-              onClick={() => {
-                onPick(u.id)
-                setOpen(false)
-              }}
-              className="block w-full px-3 py-1.5 text-left text-body text-text-primary hover:bg-surface-hover"
-            >
-              {u.display_name}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 function AttachmentRow({ attachment }: { attachment: TaskAttachmentItem }) {
   if (attachment.restricted) {
@@ -79,7 +42,15 @@ function AttachmentRow({ attachment }: { attachment: TaskAttachmentItem }) {
   )
 }
 
-function CommentThread({ dealId, taskId }: { dealId: string; taskId: string }) {
+function CommentThread({
+  dealId,
+  taskId,
+  readOnly,
+}: {
+  dealId: string
+  taskId: string
+  readOnly: boolean
+}) {
   const user = useAuthStore((s) => s.user)
   const { data: comments } = useTaskComments(dealId, taskId)
   const createComment = useCreateTaskComment(dealId, taskId)
@@ -105,23 +76,27 @@ function CommentThread({ dealId, taskId }: { dealId: string; taskId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-2">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pill-neutral-bg text-[11px] font-semibold">
-          {user ? initials(user.display_name) : ""}
-        </span>
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit()
-          }}
-          placeholder="Add a comment"
-          className="h-16 flex-1 rounded-md border border-border bg-surface-sunken p-2 text-body focus:outline-none focus:ring-2 focus:ring-brand-600"
-        />
-      </div>
-      <Button size="sm" className="self-end" onClick={submit} loading={createComment.isPending}>
-        Comment
-      </Button>
+      {!readOnly && (
+        <>
+          <div className="flex gap-2">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pill-neutral-bg text-[11px] font-semibold">
+              {user ? initials(user.display_name) : ""}
+            </span>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") submit()
+              }}
+              placeholder="Add a comment"
+              className="h-16 flex-1 rounded-md border border-border bg-surface-sunken p-2 text-body focus:outline-none focus:ring-2 focus:ring-brand-600"
+            />
+          </div>
+          <Button size="sm" className="self-end" onClick={submit} loading={createComment.isPending}>
+            Comment
+          </Button>
+        </>
+      )}
 
       {topLevel.map((c) => (
         <div key={c.id} className="flex flex-col gap-2">
@@ -161,7 +136,7 @@ function CommentThread({ dealId, taskId }: { dealId: string; taskId: string }) {
                   {c.body}
                 </p>
               )}
-              {!c.deleted && canEdit(c.author_id, c.created_at) && editingId !== c.id && (
+              {!readOnly && !c.deleted && canEdit(c.author_id, c.created_at) && editingId !== c.id && (
                 <div className="mt-1 flex gap-2 text-meta text-text-tertiary">
                   <button
                     type="button"
@@ -212,6 +187,7 @@ export function TaskDetail() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const { data: task } = useTask(dealId, taskId)
+  const { data: deal } = useDeal(dealId)
   const { data: users } = useUsers()
   const { data: documents } = useDocuments(dealId)
   const updateTask = useUpdateTask(dealId ?? "", taskId ?? "")
@@ -223,14 +199,29 @@ export function TaskDetail() {
 
   const [editingDescription, setEditingDescription] = useState(false)
   const [description, setDescription] = useState("")
-  const [showLinkPicker, setShowLinkPicker] = useState(false)
 
   if (!dealId || !taskId || !task) return null
 
+  // PRD F3: "task edit" is among the things a closed deal disables. The
+  // Tasks tab is hidden on such a deal, but this page is still reachable
+  // by a bookmarked URL and its reads still resolve, so without this
+  // every control rendered live and then failed with a 403 on click.
+  const dealClosed = deal?.stage === "successful" || deal?.stage === "dropped"
   const canEditDescription =
-    user?.role === "admin" || task.assigned_by_id === user?.id || task.assignee_id === null
+    !dealClosed &&
+    (user?.role === "admin" || task.assigned_by_id === user?.id || task.assignee_id === null)
   const canActOnTask =
-    user?.role === "admin" || task.assignee_id === user?.id || task.assigned_by_id === user?.id
+    !dealClosed &&
+    (user?.role === "admin" || task.assignee_id === user?.id || task.assigned_by_id === user?.id)
+  // PRD F8: assigning an unassigned task and an approver's reassignment
+  // both take effect immediately; only a member moving an already-assigned
+  // task raises a request. One label covered all three cases.
+  const assignLabel =
+    task.assignee_id === null
+      ? "Assign"
+      : user?.role === "admin" || user?.can_approve
+        ? "Reassign"
+        : "Request reassignment"
   const hasPendingAttachments = task.attachments.some(
     (a) => a.status === "pending" || a.status === "uploading",
   )
@@ -246,38 +237,27 @@ export function TaskDetail() {
         <p className="mb-1 text-meta text-text-tertiary">{task.key}</p>
         <h1 className="mb-4 text-title-task text-text-primary">{task.title}</h1>
 
-        <div className="mb-6 flex items-center gap-2">
-          <div className="relative">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowLinkPicker((v) => !v)}
+        {canActOnTask && (
+          <div className="mb-6 flex items-center gap-2">
+            <Menu
+              trigger={
+                <Button variant="secondary" size="sm">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  Attach
+                </Button>
+              }
             >
-              <Paperclip className="h-3.5 w-3.5" />
-              Attach
-            </Button>
-            {showLinkPicker && (
-              <div className="absolute left-0 top-9 z-10 max-h-60 w-72 overflow-y-auto rounded-md border border-border bg-surface py-1 shadow-[0_4px_12px_rgba(16,24,16,.08),0_0_0_1px_#E3E6E3]">
-                {linkableDocuments.length === 0 && (
-                  <p className="px-3 py-2 text-meta text-text-tertiary">No documents to link.</p>
-                )}
-                {linkableDocuments.map((doc) => (
-                  <button
-                    key={doc.id}
-                    type="button"
-                    onClick={() => {
-                      linkAttachment.mutate(doc.id)
-                      setShowLinkPicker(false)
-                    }}
-                    className="block w-full px-3 py-1.5 text-left text-body text-text-primary hover:bg-surface-hover"
-                  >
-                    {doc.display_name}
-                  </button>
-                ))}
-              </div>
-            )}
+              {linkableDocuments.length === 0 && (
+                <p className="px-3 py-2 text-meta text-text-tertiary">No documents to link.</p>
+              )}
+              {linkableDocuments.map((doc) => (
+                <RowMenuItem key={doc.id} onSelect={() => linkAttachment.mutate(doc.id)}>
+                  {doc.display_name}
+                </RowMenuItem>
+              ))}
+            </Menu>
           </div>
-        </div>
+        )}
 
         <section className="mb-6">
           <h2 className="mb-1 text-label text-text-tertiary">Description</h2>
@@ -335,20 +315,21 @@ export function TaskDetail() {
 
         <section className="mb-6">
           <h2 className="mb-2 text-label text-text-tertiary">Activity</h2>
-          <CommentThread dealId={dealId} taskId={taskId} />
+          <CommentThread dealId={dealId} taskId={taskId} readOnly={dealClosed} />
         </section>
 
         <div className="flex justify-end gap-2 border-t border-border pt-4">
-          <AssigneePicker
-            users={users ?? []}
-            excludeUserId={task.assignee_id}
-            onPick={(targetId) => assignTask.mutate(targetId)}
-            trigger={
-              <span className="inline-flex h-9 items-center rounded-md border border-border-strong bg-surface px-4 text-body-strong text-text-primary hover:bg-surface-sunken">
-                Request reassignment
-              </span>
-            }
-          />
+          {!dealClosed && (
+            <Menu trigger={<Button variant="secondary">{assignLabel}</Button>}>
+              {(users ?? [])
+                .filter((u) => u.id !== task.assignee_id)
+                .map((u) => (
+                  <RowMenuItem key={u.id} onSelect={() => assignTask.mutate(u.id)}>
+                    {u.display_name}
+                  </RowMenuItem>
+                ))}
+            </Menu>
+          )}
           {canActOnTask && task.status !== "done" && (
             <Button onClick={() => submitTask.mutate()} loading={submitTask.isPending}>
               {submitLabel}
@@ -392,7 +373,7 @@ export function TaskDetail() {
         <dl className="flex flex-col gap-2 text-table">
           <Detail label="Assignee">
             {task.assignee_name ?? "Unassigned"}
-            {!task.assignee_id && user && (
+            {!dealClosed && !task.assignee_id && user && (
               <button
                 type="button"
                 className="ml-2 text-meta text-brand-700 hover:underline"

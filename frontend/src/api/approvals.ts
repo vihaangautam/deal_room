@@ -27,6 +27,9 @@ export function useBulkApprovalAction() {
       qc.invalidateQueries({ queryKey: ["approvals"] })
       qc.invalidateQueries({ queryKey: ["deals"] })
       qc.invalidateQueries({ queryKey: ["tasks"] })
+      // document_upload and document_delete decisions are exactly what
+      // moves a document between pending/active/archived.
+      qc.invalidateQueries({ queryKey: ["documents"] })
     },
   })
 }

@@ -104,9 +104,19 @@ export function useUpload(dealId: string, folderId: string) {
         progress: 0,
       }))
       setItems((prev) => [...prev, ...newItems])
-      newItems.forEach((item) => {
-        void uploadOne(item.id, item.file)
-      })
+
+      // Bounded concurrency: crypto.subtle.digest can only hash a whole
+      // ArrayBuffer, so each in-flight file holds its full size in memory
+      // (up to 2 GB, PRD F5). Starting all 100 of a batch at once was a
+      // dead tab. Three at a time also keeps the 32 MB chunk POSTs from
+      // fighting each other for the tunnel.
+      const queue = [...newItems]
+      const worker = async () => {
+        for (let next = queue.shift(); next; next = queue.shift()) {
+          await uploadOne(next.id, next.file)
+        }
+      }
+      void Promise.all([worker(), worker(), worker()])
     },
     [uploadOne],
   )

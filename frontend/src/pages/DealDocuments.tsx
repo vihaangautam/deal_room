@@ -64,10 +64,12 @@ function FileRow({
   doc,
   dealId,
   access,
+  dealClosed,
 }: {
   doc: DocumentItem
   dealId: string
   access: AccessLevel
+  dealClosed: boolean
 }) {
   const user = useAuthStore((s) => s.user)
   const rename = useRenameDocument(dealId)
@@ -79,7 +81,8 @@ function FileRow({
   const isOwnPending = doc.status === "pending" && doc.uploaded_by_name === user?.display_name
   const isOwnRejected = doc.status === "rejected"
   const isLinkable = doc.status === "active" || doc.status === "delete_requested"
-  const canContribute = access === "contribute"
+  // PRD F3: rename and delete request are disabled on a closed deal.
+  const canContribute = access === "contribute" && !dealClosed
 
   function saveRename() {
     if (baseName.trim()) rename.mutate({ docId: doc.id, baseName: baseName.trim() })
@@ -189,6 +192,13 @@ export function DealDocuments() {
     return counts
   }, [documents])
 
+  // PRD §5: a Documents count means active files the viewer can see —
+  // the folder list beside this already counted that way.
+  const activeDocCount = useMemo(
+    () => (documents ?? []).filter((d) => d.status === "active").length,
+    [documents],
+  )
+
   const visibleDocs = useMemo(
     () => (documents ?? []).filter((d) => d.folder_id === selectedFolderId),
     [documents, selectedFolderId],
@@ -229,7 +239,7 @@ export function DealDocuments() {
           to={`/deals/${dealId}/documents`}
           className="flex h-full items-center border-b-2 border-brand-600 text-body-strong text-brand-700"
         >
-          Documents {documents?.length ?? 0}
+          Documents {activeDocCount}
         </Link>
         {deal.stage === "running" && (
           <button
@@ -329,7 +339,13 @@ export function DealDocuments() {
                   </tr>
                 )}
                 {visibleDocs.map((doc) => (
-                  <FileRow key={doc.id} doc={doc} dealId={dealId} access={selectedAccess} />
+                  <FileRow
+                    key={doc.id}
+                    doc={doc}
+                    dealId={dealId}
+                    access={selectedAccess}
+                    dealClosed={dealClosed}
+                  />
                 ))}
               </tbody>
             </table>

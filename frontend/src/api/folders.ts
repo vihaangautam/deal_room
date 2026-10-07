@@ -14,7 +14,12 @@ export function useCreateFolder() {
   return useMutation({
     mutationFn: (body: { name: string; default_access?: "none" | "view" }) =>
       apiFetch<Folder>("/folders", { method: "POST", body }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["folders"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["folders"] })
+      // PRD F4: a new folder's default access applies to current members
+      // at once, so each viewer's own access map changed too.
+      qc.invalidateQueries({ queryKey: ["my-permissions"] })
+    },
   })
 }
 
@@ -23,7 +28,12 @@ export function useRenameFolder() {
   return useMutation({
     mutationFn: ({ folderId, name }: { folderId: string; name: string }) =>
       apiFetch<Folder>(`/folders/${folderId}`, { method: "PATCH", body: { name } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["folders"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["folders"] })
+      // PRD F4: a new folder's default access applies to current members
+      // at once, so each viewer's own access map changed too.
+      qc.invalidateQueries({ queryKey: ["my-permissions"] })
+    },
   })
 }
 
@@ -40,6 +50,11 @@ export function useDeleteFolder() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (folderId: string) => apiFetch<void>(`/folders/${folderId}`, { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["folders"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["folders"] })
+      // PRD F4: a new folder's default access applies to current members
+      // at once, so each viewer's own access map changed too.
+      qc.invalidateQueries({ queryKey: ["my-permissions"] })
+    },
   })
 }

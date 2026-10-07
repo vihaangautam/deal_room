@@ -82,7 +82,11 @@ export function useRestoreDocument() {
   return useMutation({
     mutationFn: (docId: string) =>
       apiFetch<{ status: string }>(`/admin/archive/${docId}/restore`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "archive"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "archive"] })
+      // The file reappears in its deal's document list.
+      qc.invalidateQueries({ queryKey: ["documents"] })
+    },
   })
 }
 
@@ -91,7 +95,10 @@ export function usePurgeDocument() {
   return useMutation({
     mutationFn: (docId: string) =>
       apiFetch<{ status: string }>(`/admin/archive/${docId}/purge`, { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "archive"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "archive"] })
+      qc.invalidateQueries({ queryKey: ["documents"] })
+    },
   })
 }
 

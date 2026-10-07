@@ -90,6 +90,10 @@ function FolderRow({ folder }: { folder: Folder }) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(folder.name)
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null)
+  // DESIGN.md §5.13 wants a confirmation on every destructive action, and
+  // "Delete" went straight through: a folder is part of every deal, so
+  // one stray click removed a row from all of them.
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   function saveRename() {
     if (name.trim() && name !== folder.name) rename.mutate({ folderId: folder.id, name: name.trim() })
@@ -128,11 +132,38 @@ function FolderRow({ folder }: { folder: Folder }) {
       <td className="w-10 px-2">
         <RowMenu>
           <RowMenuItem onSelect={() => setRenaming(true)}>Rename</RowMenuItem>
-          <RowMenuItem danger onSelect={handleDelete}>
+          <RowMenuItem danger onSelect={() => setConfirmOpen(true)}>
             Delete
           </RowMenuItem>
         </RowMenu>
       </td>
+
+      <Dialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`Delete the ${folder.name} folder?`}
+        width={440}
+      >
+        <p className="text-body text-text-secondary">
+          It will stop appearing in every deal. Folders holding files can't be deleted, so nothing
+          is lost — but you'll have to add it again to get it back.
+        </p>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            loading={deleteFolder.isPending}
+            onClick={async () => {
+              setConfirmOpen(false)
+              await handleDelete()
+            }}
+          >
+            Delete folder
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       <BlockedDialog
         open={blockedMessage !== null}

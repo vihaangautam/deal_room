@@ -24,6 +24,7 @@ from app.schemas.document import (
     DocumentInitRequest,
     DocumentInitResponse,
 )
+from app.routers.upload import resolve_upload_slot
 from app.schemas.task import (
     AssignRequest,
     AttachLinkRequest,
@@ -553,15 +554,20 @@ async def init_attachment_upload(
     if ext not in ALLOWED_MIME_EXTENSIONS:
         raise HTTPException(status_code=422, detail=f"Not allowed: {ext} files can't be uploaded.")
 
-    dup = await db.scalar(
-        select(Document).where(
-            Document.deal_id == deal_id,
-            Document.sha256 == body.sha256,
-            Document.status.in_(["uploading", "pending", "active", "delete_requested"]),
+    resumable = await resolve_upload_slot(db, deal_id, body.sha256, user)
+    if resumable is not None:
+        # Same resume-vs-duplicate rule as a plain upload, so Retry works
+        # here too. The attachment row may already exist from the first
+        # attempt, hence the existence check below.
+        link = await db.scalar(
+            select(TaskAttachment).where(
+                TaskAttachment.task_id == task_id, TaskAttachment.document_id == resumable.id
+            )
         )
-    )
-    if dup:
-        raise HTTPException(status_code=409, detail=f"Already in this deal as '{dup.display_name}'")
+        if link is None:
+            db.add(TaskAttachment(task_id=task_id, document_id=resumable.id))
+            await db.commit()
+        return DocumentInitResponse(doc_id=resumable.id)
 
     doc = Document(
         deal_id=deal_id,

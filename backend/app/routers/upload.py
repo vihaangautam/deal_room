@@ -38,6 +38,43 @@ MAX_CHUNK_SIZE = 32 * 1024 * 1024  # CLAUDE.md §5.6
 UPLOAD_STATUSES_BLOCKING_DEDUP = ("uploading", "pending", "active", "delete_requested")
 
 
+async def resolve_upload_slot(
+    db: AsyncSession, deal_id: uuid.UUID, sha256: str, user: User
+) -> Document | None:
+    """Dedup (PRD F5), checked before any bytes transfer rather than left
+    to the DB's partial unique index at complete() time.
+
+    Returns a row to resume into, or None to create a fresh one, and
+    raises 409 when the file is genuinely already in the deal. The resume
+    case is why Retry works at all: init writes a row with status
+    'uploading', and a failed chunk or complete() leaves it that way —
+    which is one of the statuses this check blocks on, so a second init
+    for the same file used to answer "Already in Bank documents as
+    'x.pdf'" and PRD F5's "Retry resumes only that file" could never
+    happen. Only the same uploader's own stalled upload is resumable;
+    anyone else, or any further-along status, is a real duplicate.
+    """
+    dup_row = (
+        await db.execute(
+            select(Document, FolderTemplate.name)
+            .join(FolderTemplate, FolderTemplate.id == Document.folder_id)
+            .where(
+                Document.deal_id == deal_id,
+                Document.sha256 == sha256,
+                Document.status.in_(UPLOAD_STATUSES_BLOCKING_DEDUP),
+            )
+            .limit(1)
+        )
+    ).first()
+    if dup_row is None:
+        return None
+
+    doc, folder_name = dup_row
+    if doc.status == "uploading" and doc.uploaded_by == user.id:
+        return doc
+    raise HTTPException(status_code=409, detail=f"Already in {folder_name} as '{doc.display_name}'")
+
+
 @router.post("/deals/{deal_id}/documents/init", response_model=DocumentInitResponse)
 async def init_upload(
     deal_id: uuid.UUID,
@@ -59,26 +96,10 @@ async def init_upload(
             status_code=422, detail=f"Not allowed: {ext} files can't be uploaded."
         )
 
-    # Dedup, checked here before any bytes transfer — not just relied on
-    # via the DB's partial unique index at complete() time (PRD F5 /
-    # ARCHITECTURE.md §4).
-    dup_row = (
-        await db.execute(
-            select(Document.display_name, FolderTemplate.name)
-            .join(FolderTemplate, FolderTemplate.id == Document.folder_id)
-            .where(
-                Document.deal_id == deal_id,
-                Document.sha256 == body.sha256,
-                Document.status.in_(UPLOAD_STATUSES_BLOCKING_DEDUP),
-            )
-            .limit(1)
-        )
-    ).first()
-    if dup_row:
-        display_name, folder_name = dup_row
-        raise HTTPException(
-            status_code=409, detail=f"Already in {folder_name} as '{display_name}'"
-        )
+    resumable = await resolve_upload_slot(db, deal_id, body.sha256, user)
+    if resumable is not None:
+        (CHUNK_DIR / str(resumable.id)).mkdir(parents=True, exist_ok=True)
+        return DocumentInitResponse(doc_id=resumable.id)
 
     doc = Document(
         deal_id=deal_id,
