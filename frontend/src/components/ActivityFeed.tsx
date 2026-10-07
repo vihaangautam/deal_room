@@ -1,4 +1,5 @@
-import { avatarColor, formatDateTime, initials } from "@/lib/utils"
+import { Avatar } from "@/components/ui/avatar"
+import { formatDateTime } from "@/lib/utils"
 import type { AuditLogItem } from "@/api/types"
 
 // DESIGN.md §6.11 wants a sentence: "Meera Shah uploaded 'SBI sanction
@@ -97,13 +98,7 @@ export function ActivityFeed({
           <span className="w-36 shrink-0 text-meta tabular-nums text-text-tertiary">
             {formatDateTime(item.created_at)}
           </span>
-          <span
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-text-primary"
-            style={{ backgroundColor: item.actor_id ? avatarColor(item.actor_id) : undefined }}
-            aria-hidden
-          >
-            {item.actor_name ? initials(item.actor_name) : "·"}
-          </span>
+          <Avatar name={item.actor_name ?? "·"} id={item.actor_id} size={20} />
           <span className="text-table text-text-secondary">
             <span className="font-medium text-text-primary">{item.actor_name ?? "Someone"}</span>{" "}
             {describeActivity(item)}

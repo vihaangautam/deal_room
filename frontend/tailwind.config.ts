@@ -64,6 +64,9 @@ export default {
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
       },
+      maxWidth: {
+        content: "1400px",
+      },
       fontSize: {
         // DESIGN.md §3.2 — [size, { lineHeight, fontWeight }]
         "title-page": ["20px", { lineHeight: "28px", fontWeight: "600" }],

@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react"
 import { useApprovals, useBulkApprovalAction } from "@/api/approvals"
+import { Avatar } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { PageBody } from "@/components/PageBody"
 import { PageHeader } from "@/components/PageHeader"
+import { Tab, TabBand } from "@/components/TabBand"
+import { TableFooter } from "@/components/TableFooter"
 import { toast } from "@/components/ui/toast"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { formatDateTime } from "@/lib/utils"
@@ -48,23 +52,40 @@ function RejectDialog({
   )
 }
 
+// The queue's own tabs. "All" plus one per kind of request, each with its
+// count — the two dropdowns these replace hid both the counts and the
+// fact that anything was filtered at all.
+const TYPE_TABS: { id: ApprovalType | "all"; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "document_upload", label: "Uploads" },
+  { id: "document_delete", label: "Deletions" },
+  { id: "task_reassign", label: "Reassignments" },
+  { id: "task_delete", label: "Task deletions" },
+]
+
 export function Approvals() {
-  const [typeFilter, setTypeFilter] = useState<ApprovalType | "">("")
-  const [dealFilter, setDealFilter] = useState("")
-  const { data: approvals, isLoading } = useApprovals(typeFilter ? { type: typeFilter } : undefined)
+  const [typeFilter, setTypeFilter] = useState<ApprovalType | "all">("all")
+  const [search, setSearch] = useState("")
+  const { data: approvals, isLoading } = useApprovals()
   const bulkAction = useBulkApprovalAction()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [rejectOpen, setRejectOpen] = useState(false)
 
-  const deals = useMemo(() => {
-    const names = new Set((approvals ?? []).map((a) => a.deal_name))
-    return Array.from(names)
-  }, [approvals])
+  const all = approvals ?? []
+  const countFor = (id: ApprovalType | "all") =>
+    id === "all" ? all.length : all.filter((a) => a.type === id).length
 
-  const rows = useMemo(
-    () => (dealFilter ? (approvals ?? []).filter((a) => a.deal_name === dealFilter) : (approvals ?? [])),
-    [approvals, dealFilter],
-  )
+  const rows = useMemo(() => {
+    const byType = typeFilter === "all" ? all : all.filter((a) => a.type === typeFilter)
+    const q = search.trim().toLowerCase()
+    if (!q) return byType
+    return byType.filter(
+      (a) =>
+        a.item_label.toLowerCase().includes(q) ||
+        a.deal_name.toLowerCase().includes(q) ||
+        a.requested_by_name.toLowerCase().includes(q),
+    )
+  }, [all, typeFilter, search])
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -104,54 +125,47 @@ export function Approvals() {
         title="Approvals"
         pill={<span className="text-table text-text-tertiary">{rows.length} waiting</span>}
       />
-      <div className="px-6 py-6">
+      <TabBand
+        tabs={TYPE_TABS.map((t) => (
+          <Tab
+            key={t.id}
+            active={typeFilter === t.id}
+            count={countFor(t.id)}
+            onClick={() => {
+              setTypeFilter(t.id)
+              // Selections are per row; leaving them set while the visible
+              // rows change would approve things the user can no longer see.
+              setSelected(new Set())
+            }}
+          >
+            {t.label}
+          </Tab>
+        ))}
+        search={{ value: search, onChange: setSearch, placeholder: "Search requests" }}
+      />
 
-      <div className="rounded-md border border-border">
-        {selected.size > 0 ? (
-          <div className="flex h-11 items-center gap-3 border-b border-border bg-brand-50 px-4">
+      <PageBody>
+        {selected.size > 0 && (
+          <div className="mb-4 flex h-14 items-center gap-3 rounded-lg border border-border bg-brand-50 px-4">
             <span className="text-body-strong text-brand-700">{selected.size} selected</span>
+            <span className="h-5 w-px bg-border" aria-hidden />
             <Button size="sm" onClick={approveSelected} loading={bulkAction.isPending}>
               Approve selected
             </Button>
-            <Button size="sm" variant="destructive" onClick={() => setRejectOpen(true)}>
+            <Button size="sm" variant="secondary" className="text-text-danger" onClick={() => setRejectOpen(true)}>
               Reject selected
             </Button>
             <button
               type="button"
-              className="ml-auto text-meta text-text-tertiary hover:text-text-secondary"
+              className="ml-auto text-body-strong text-text-secondary hover:text-text-primary"
               onClick={() => setSelected(new Set())}
             >
               Clear selection
             </button>
           </div>
-        ) : (
-          <div className="flex h-11 items-center gap-2 border-b border-border px-4">
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as ApprovalType | "")}
-              className="h-8 rounded-md border border-border bg-surface px-2 text-table"
-            >
-              <option value="">All types</option>
-              <option value="document_upload">Upload</option>
-              <option value="document_delete">Deletion</option>
-              <option value="task_reassign">Reassign</option>
-              <option value="task_delete">Delete task</option>
-            </select>
-            <select
-              value={dealFilter}
-              onChange={(e) => setDealFilter(e.target.value)}
-              className="h-8 rounded-md border border-border bg-surface px-2 text-table"
-            >
-              <option value="">All deals</option>
-              {deals.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </div>
         )}
 
+        <div className="overflow-hidden rounded-lg border border-border bg-surface">
         <table className="w-full">
           <thead>
             <tr className="h-9 bg-surface-sunken text-left text-label text-text-tertiary">
@@ -159,6 +173,11 @@ export function Approvals() {
                 <input
                   type="checkbox"
                   checked={rows.length > 0 && selected.size === rows.length}
+                  // Some-but-not-all is its own state; without it the box
+                  // reads as "nothing selected" while two rows are.
+                  ref={(el) => {
+                    if (el) el.indeterminate = selected.size > 0 && selected.size < rows.length
+                  }}
                   onChange={toggleAll}
                   aria-label="Select all"
                 />
@@ -195,16 +214,17 @@ export function Approvals() {
             ))}
           </tbody>
         </table>
+        <TableFooter count={rows.length} noun="request" />
       </div>
 
-      <RejectDialog
+        <RejectDialog
         open={rejectOpen}
         onOpenChange={setRejectOpen}
         count={selected.size}
         pending={bulkAction.isPending}
-        onConfirm={rejectSelected}
-      />
-      </div>
+          onConfirm={rejectSelected}
+        />
+      </PageBody>
     </>
   )
 }
@@ -221,7 +241,12 @@ function Row({ row, checked, onToggle }: { row: ApprovalItem; checked: boolean; 
         {row.item_sublabel && <p className="text-meta text-text-tertiary">{row.item_sublabel}</p>}
       </td>
       <td className="px-4 text-table text-text-secondary">{row.deal_name}</td>
-      <td className="px-4 text-table text-text-secondary">{row.requested_by_name}</td>
+      <td className="px-4 text-table text-text-secondary">
+        <span className="flex items-center gap-2">
+          <Avatar name={row.requested_by_name} size={20} />
+          {row.requested_by_name}
+        </span>
+      </td>
       <td className="px-4 text-meta text-text-tertiary">{formatDateTime(row.requested_at)}</td>
       <td className="max-w-48 truncate px-4 text-meta text-text-tertiary" title={row.note ?? undefined}>
         {row.note ?? "—"}

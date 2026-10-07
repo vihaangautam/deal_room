@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { useCreateTask, useTasks } from "@/api/tasks"
 import { useDeal } from "@/api/deals"
 import { DealHeader } from "@/components/DealHeader"
+import { PageBody } from "@/components/PageBody"
 import { TaskStatusPill, NeedsAttentionPill } from "@/components/StatusPill"
 import { cn, formatDate } from "@/lib/utils"
 import type { TaskListItem, TaskPriority } from "@/api/types"
@@ -75,7 +76,7 @@ export function DealTasks() {
   return (
     <>
     <DealHeader deal={deal} />
-      <div className="px-6 py-6">
+      <PageBody>
       <div className="rounded-md border border-border">
         <table className="w-full">
           <thead>
@@ -138,7 +139,7 @@ export function DealTasks() {
           </tbody>
         </table>
       </div>
-      </div>
+      </PageBody>
     </>
   )
 }

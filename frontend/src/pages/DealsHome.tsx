@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Plus, Search } from "lucide-react"
+import { Plus } from "lucide-react"
 import { useCreateDeal, useDeals } from "@/api/deals"
 import { ApiError } from "@/api/client"
 import { useAuthStore } from "@/stores/auth"
 import { Button } from "@/components/ui/button"
+import { PageBody } from "@/components/PageBody"
 import { PageHeader } from "@/components/PageHeader"
+import { Tab, TabBand } from "@/components/TabBand"
+import { TableFooter } from "@/components/TableFooter"
 import { Input } from "@/components/ui/input"
 import { Field } from "@/components/ui/field"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
@@ -141,31 +144,17 @@ export function DealsHome() {
           )
         }
       />
-      <div className="px-6 py-6">
-
-      <div className="rounded-lg border border-border bg-surface">
-        <div className="flex h-10 items-center gap-6 border-b border-border px-4">
-          {(["new", "running", "old"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={cn(
-                "relative flex h-full items-center gap-1.5 text-body-strong capitalize",
-                tab === t ? "text-brand-700" : "text-text-secondary",
-              )}
-            >
-              {t === "new" ? "New" : t === "running" ? "Running" : "Old"}
-              <span className="text-meta font-normal text-text-tertiary">{counts[t]}</span>
-              {tab === t && (
-                <span className="absolute -bottom-[1px] left-0 right-0 h-0.5 bg-brand-600" />
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex h-10 items-center gap-3 border-b border-border px-4">
-          {tab === "old" && (
+      <TabBand
+        tabs={(["new", "running", "old"] as const).map((t) => (
+          <Tab key={t} active={tab === t} count={counts[t]} onClick={() => setTab(t)}>
+            {t === "new" ? "New" : t === "running" ? "Running" : "Old"}
+          </Tab>
+        ))}
+        trailing={
+          // DESIGN.md §6.2: the segmented control appears only while Old
+          // is active. It belongs in the band with the tabs it qualifies,
+          // not on a toolbar of its own.
+          tab === "old" && (
             <div className="flex gap-1">
               {(["all", "successful", "dropped"] as const).map((f) => (
                 <button
@@ -173,7 +162,7 @@ export function DealsHome() {
                   type="button"
                   onClick={() => setOldFilter(f)}
                   className={cn(
-                    "rounded-md px-2 py-1 text-[13px] font-medium capitalize",
+                    "h-8 rounded-md px-2.5 text-table font-medium capitalize",
                     oldFilter === f
                       ? "bg-brand-50 text-brand-700"
                       : "text-text-secondary hover:bg-surface-hover",
@@ -183,21 +172,13 @@ export function DealsHome() {
                 </button>
               ))}
             </div>
-          )}
-          <div className="relative w-60">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
-            <input
-              placeholder="Search deals…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-8 w-full rounded-md border border-border bg-surface pl-8 pr-2 text-table text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-brand-600"
-            />
-          </div>
-          <span className="ml-auto text-meta text-text-tertiary">
-            {rows.length} deal{rows.length === 1 ? "" : "s"}
-          </span>
-        </div>
+          )
+        }
+        search={{ value: search, onChange: setSearch, placeholder: "Search deals" }}
+      />
 
+      <PageBody>
+        <div className="overflow-hidden rounded-lg border border-border bg-surface">
         <table className="w-full">
           <thead>
             <tr className="h-9 bg-surface-sunken text-left text-label text-text-tertiary">
@@ -228,14 +209,20 @@ export function DealsHome() {
             )}
 
             {rows.map((deal) => (
-              <DealRow key={deal.id} deal={deal} showTasks={tab === "running"} onOpen={() => navigate(`/deals/${deal.id}/documents`)} />
+              <DealRow
+                key={deal.id}
+                deal={deal}
+                showTasks={tab === "running"}
+                onOpen={() => navigate(`/deals/${deal.id}/documents`)}
+              />
             ))}
           </tbody>
         </table>
+        <TableFooter count={rows.length} noun="deal" />
       </div>
 
-      <NewDealDialog open={dialogOpen} onOpenChange={setDialogOpen} />
-      </div>
+        <NewDealDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      </PageBody>
     </>
   )
 }
@@ -273,7 +260,7 @@ function DealRow({
       <td className="px-4 text-right text-meta text-text-tertiary" title={formatDate(deal.updated_at)}>
         {relativeTime(deal.updated_at)}
       </td>
-      <td className="px-4 text-right tabular-nums text-meta text-text-tertiary">
+      <td className="px-4 text-right text-meta text-text-tertiary">
         {formatDate(deal.created_at)}
       </td>
     </tr>

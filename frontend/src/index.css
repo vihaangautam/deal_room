@@ -66,3 +66,14 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* DESIGN: checkbox is 16px with a 4px radius, and both checked and
+   indeterminate fill brand-600. accent-color covers both states without
+   rebuilding the control. */
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  accent-color: var(--brand-600);
+  cursor: pointer;
+}

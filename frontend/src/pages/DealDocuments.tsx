@@ -7,6 +7,7 @@ import { useFolders } from "@/api/folders"
 import { useMyPermissions } from "@/api/permissions"
 import { useAuthStore } from "@/stores/auth"
 import { DealHeader } from "@/components/DealHeader"
+import { PageBody } from "@/components/PageBody"
 import { DocumentStatusPill } from "@/components/StatusPill"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/toast"
@@ -217,7 +218,6 @@ export function DealDocuments() {
   const folderDocCounts = useMemo(() => {
     const counts = new Map<string, number>()
     for (const doc of documents ?? []) {
-      if (doc.status !== "active") continue
       counts.set(doc.folder_id, (counts.get(doc.folder_id) ?? 0) + 1)
     }
     return counts
@@ -255,7 +255,7 @@ export function DealDocuments() {
         </>
       }
     />
-      <div className="px-6 py-6">
+      <PageBody>
       {dealClosed && (
         <div className="mb-4 rounded-md bg-info-50 px-3 py-2 text-body text-text-info">
           This deal is closed. Files can be downloaded but not changed.
@@ -369,7 +369,7 @@ export function DealDocuments() {
       )}
 
       <StageChangeDialog open={stageDialogOpen} onOpenChange={setStageDialogOpen} deal={deal} />
-      </div>
+      </PageBody>
     </>
   )
 }

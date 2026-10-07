@@ -16,7 +16,8 @@ import { useDeals } from "@/api/deals"
 import { useMyTasks } from "@/api/tasks"
 import { useAuthStore } from "@/stores/auth"
 import { Menu, RowMenuItem } from "@/components/ui/dropdown-menu"
-import { cn, initials } from "@/lib/utils"
+import { Avatar } from "@/components/ui/avatar"
+import { cn } from "@/lib/utils"
 
 function NavRow({
   to,
@@ -42,14 +43,18 @@ function NavRow({
         active ? "bg-brand-50 text-brand-700" : "text-text-secondary hover:bg-surface-hover",
       )}
     >
-      {active && <span className="absolute left-0 top-0 h-full w-[3px] rounded-r bg-brand-600" />}
+      {/* In the sidebar's 8px padding, flush to its edge — not inset to
+          the row, which left it floating in the middle of the gutter. */}
+      {active && <span className="absolute -left-2 top-0 h-full w-[3px] rounded-r bg-brand-600" />}
       <Icon className="h-4 w-4" aria-hidden />
       <span className="flex-1">{label}</span>
       {showCount && (
         <span
           className={cn(
-            "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-            isApprovalBadge ? "bg-brand-700 text-white" : "bg-[#EEF0EE] text-text-tertiary",
+            "flex items-center justify-center rounded-full text-[11px] font-semibold",
+            isApprovalBadge
+              ? "h-5 w-5 bg-brand-700 text-white"
+              : "h-5 min-w-5 px-1.5 bg-[#EEF0EE] text-text-tertiary",
           )}
         >
           {count}
@@ -98,12 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           align="end"
           trigger={
             <button type="button" className="flex items-center gap-2">
-              <span
-                className="flex h-6 w-6 items-center justify-center rounded-full bg-pill-neutral-bg text-[11px] font-semibold text-text-primary"
-                aria-hidden
-              >
-                {user ? initials(user.display_name) : ""}
-              </span>
+              <Avatar name={user?.display_name ?? ""} id={user?.id} />
               <span className="text-left">
                 <span className="block text-body-strong text-text-primary">{user?.display_name}</span>
                 <span className="block text-meta text-text-tertiary">
@@ -119,7 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <div className="flex">
-        <nav className="fixed bottom-0 left-0 top-12 w-[232px] overflow-y-auto border-r border-border bg-surface p-3">
+        <nav className="fixed bottom-0 left-0 top-12 w-[232px] overflow-y-auto border-r border-border bg-surface p-2">
           <div className="flex flex-col gap-1">
             <NavRow
               to="/deals"

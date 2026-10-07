@@ -5,6 +5,8 @@ import type { ReactNode } from "react"
 // 20/600 with the stage pill 8px after it where applicable. Right:
 // secondary actions, then one primary action."
 //
+// Tabs are not here: they get their own 48px band (components/TabBand)
+// so they can share the row with a search field.
 // Every page used to render its title on the canvas with no band at all,
 // so there was no line between the page's identity and its content, and
 // each page spaced its own title differently.
@@ -13,19 +15,16 @@ export function PageHeader({
   title,
   pill,
   actions,
-  tabs,
 }: {
   breadcrumb?: ReactNode
   title: ReactNode
   /** The deal stage pill, 8px after the title. */
   pill?: ReactNode
   actions?: ReactNode
-  /** Deal pages add a 40px tab row directly beneath (§4.3). */
-  tabs?: ReactNode
 }) {
   return (
-    <header className="border-b border-border bg-surface px-6">
-      <div className="flex h-16 items-center justify-between gap-4">
+    <header className="border-b border-border bg-surface">
+      <div className="mx-auto flex h-16 max-w-content items-center justify-between gap-4 px-6">
         <div className="min-w-0">
           {breadcrumb && <div className="text-meta text-text-tertiary">{breadcrumb}</div>}
           <div className="flex items-center gap-2">
@@ -35,7 +34,6 @@ export function PageHeader({
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
-      {tabs && <div className="flex h-10 items-center gap-6">{tabs}</div>}
     </header>
   )
 }

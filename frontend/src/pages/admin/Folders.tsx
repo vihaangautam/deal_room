@@ -9,6 +9,8 @@ import {
   useReorderFolders,
 } from "@/api/folders"
 import { Button } from "@/components/ui/button"
+import { PageBody } from "@/components/PageBody"
+import { TableFooter } from "@/components/TableFooter"
 import { PageHeader } from "@/components/PageHeader"
 import { Input } from "@/components/ui/input"
 import { Field } from "@/components/ui/field"
@@ -287,7 +289,7 @@ export function Folders() {
           </Button>
         }
       />
-      <div className="px-6 py-6">
+      <PageBody>
       <p className="mb-4 text-table text-text-tertiary">
         Folders appear in every deal. Changes apply everywhere immediately.
       </p>
@@ -323,10 +325,11 @@ export function Folders() {
             ))}
           </tbody>
         </table>
+        <TableFooter count={ordered.length} noun="folder" />
       </div>
 
       <AddFolderDialog open={addOpen} onOpenChange={setAddOpen} />
-      </div>
+      </PageBody>
     </>
   )
 }

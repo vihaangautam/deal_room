@@ -10,6 +10,8 @@ import {
 } from "@/api/admin"
 import { documentDownloadUrl } from "@/api/documents"
 import { Button } from "@/components/ui/button"
+import { PageBody } from "@/components/PageBody"
+import { TableFooter } from "@/components/TableFooter"
 import { PageHeader } from "@/components/PageHeader"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
@@ -112,7 +114,7 @@ export function Archive() {
   return (
     <>
       <PageHeader title="Archive" />
-      <div className="px-6 py-6">
+      <PageBody>
       <div className="mb-4 flex items-baseline justify-between">
         <p className="text-table text-text-tertiary">
           Files approved for deletion. Kept until you remove them under retention settings.
@@ -183,6 +185,7 @@ export function Archive() {
             ))}
           </tbody>
         </table>
+        <TableFooter count={items?.length ?? 0} noun="file" />
       </div>
 
       <RetentionDialog open={retentionOpen} onOpenChange={setRetentionOpen} current={retention} />
@@ -198,7 +201,7 @@ export function Archive() {
           }
         }}
       />
-      </div>
+      </PageBody>
     </>
   )
 }

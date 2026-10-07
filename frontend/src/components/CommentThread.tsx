@@ -2,23 +2,13 @@ import { useState } from "react"
 import { useComments, useCreateComment, useDeleteComment, useEditComment } from "@/api/comments"
 import { useAuthStore } from "@/stores/auth"
 import { Button } from "@/components/ui/button"
-import { formatDateTime, initials } from "@/lib/utils"
+import { Avatar } from "@/components/ui/avatar"
+import { formatDateTime } from "@/lib/utils"
 import type { Comment } from "@/api/types"
 
 // PRD F8: the author may edit or delete within 15 minutes. The backend
 // enforces the same window — this only decides whether to offer it.
 const EDIT_WINDOW_MS = 15 * 60 * 1000
-
-function Avatar({ name }: { name: string }) {
-  return (
-    <span
-      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pill-neutral-bg text-[11px] font-semibold"
-      aria-hidden
-    >
-      {initials(name)}
-    </span>
-  )
-}
 
 function Composer({
   placeholder,

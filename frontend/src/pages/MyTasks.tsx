@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from "lucide-react"
 import { useMyTasks } from "@/api/tasks"
 import { TaskStatusPill, NeedsAttentionPill } from "@/components/StatusPill"
 import { cn, formatDate } from "@/lib/utils"
+import { PageBody } from "@/components/PageBody"
 import { PageHeader } from "@/components/PageHeader"
 import type { TaskListItem, TaskStatus } from "@/api/types"
 
@@ -37,14 +38,14 @@ export function MyTasks() {
     return (
       <>
         <PageHeader title="My Tasks" />
-        <div className="px-6 py-6">
+        <PageBody>
         <div className="rounded-md border border-border px-4 py-10 text-center">
           <p className="text-body-strong text-text-primary">Nothing assigned to you</p>
           <p className="text-table text-text-secondary">
             Tasks assigned to you on running deals appear here.
           </p>
         </div>
-        </div>
+        </PageBody>
       </>
     )
   }
@@ -52,7 +53,7 @@ export function MyTasks() {
   return (
     <>
       <PageHeader title="My Tasks" />
-      <div className="px-6 py-6">
+      <PageBody>
 
       <div className="flex flex-col gap-6">
         {GROUP_ORDER.map((status) => {
@@ -120,7 +121,7 @@ export function MyTasks() {
           )
         })}
       </div>
-      </div>
+      </PageBody>
     </>
   )
 }

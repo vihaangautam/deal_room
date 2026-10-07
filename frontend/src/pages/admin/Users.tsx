@@ -2,6 +2,9 @@ import { useState } from "react"
 import { useAdminUsers, useCreateUser, usePermissionMatrix, useResetPassword, useSetPermission, useUpdateUser } from "@/api/admin"
 import { useFolders } from "@/api/folders"
 import { Button } from "@/components/ui/button"
+import { PageBody } from "@/components/PageBody"
+import { Tab, TabBand } from "@/components/TabBand"
+import { TableFooter } from "@/components/TableFooter"
 import { PageHeader } from "@/components/PageHeader"
 import { Input } from "@/components/ui/input"
 import { Field } from "@/components/ui/field"
@@ -178,6 +181,7 @@ function UsersTab({ addOpen, setAddOpen }: { addOpen: boolean; setAddOpen: (v: b
             ))}
           </tbody>
         </table>
+        <TableFooter count={users?.length ?? 0} noun="user" />
       </div>
       <AddUserDialog open={addOpen} onOpenChange={setAddOpen} />
     </div>
@@ -278,28 +282,20 @@ export function Users() {
           tab === "users" && <Button onClick={() => setAddOpen(true)}>Add user</Button>
         }
       />
-      <div className="px-6 py-6">
-      <div className="mb-4 flex h-9 items-center gap-6 border-b border-border">
-        {(["users", "permissions"] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={cn(
-              "flex h-full items-center border-b-2 text-body-strong",
-              tab === t ? "border-brand-600 text-brand-700" : "border-transparent text-text-secondary",
-            )}
-          >
+      <TabBand
+        tabs={(["users", "permissions"] as const).map((t) => (
+          <Tab key={t} active={tab === t} onClick={() => setTab(t)}>
             {t === "users" ? "Users" : "Folder access"}
-          </button>
+          </Tab>
         ))}
-      </div>
+      />
+      <PageBody>
       {tab === "users" ? (
         <UsersTab addOpen={addOpen} setAddOpen={setAddOpen} />
       ) : (
         <PermissionMatrixTab />
       )}
-      </div>
+      </PageBody>
     </>
   )
 }

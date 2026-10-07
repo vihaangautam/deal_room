@@ -5,6 +5,7 @@ import { useAuthStore } from "@/stores/auth"
 import { ActivityFeed } from "@/components/ActivityFeed"
 import { CommentThread } from "@/components/CommentThread"
 import { DealHeader } from "@/components/DealHeader"
+import { PageBody } from "@/components/PageBody"
 import { cn } from "@/lib/utils"
 
 // DESIGN.md §5.11 gives the Activity section underline tabs
@@ -39,7 +40,7 @@ export function DealActivity() {
   return (
     <>
     <DealHeader deal={deal} />
-      <div className="px-6 py-6">
+      <PageBody>
       {panes.length > 0 && (
         <div className="mb-4 flex gap-4">
           {panes.map((p) => (
@@ -77,7 +78,7 @@ export function DealActivity() {
           </section>
         )}
       </div>
-      </div>
+      </PageBody>
     </>
   )
 }
