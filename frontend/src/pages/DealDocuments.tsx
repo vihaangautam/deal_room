@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { MultiFileUploadDialog } from "@/components/MultiFileUpload"
+import { StageChangeDialog } from "@/components/StageChangeDialog"
 import { cn, formatBytes, formatDate } from "@/lib/utils"
 import type { AccessLevel, DocumentItem } from "@/api/types"
 
@@ -169,11 +170,13 @@ function FileRow({
 export function DealDocuments() {
   const { dealId, folderId } = useParams<{ dealId: string; folderId?: string }>()
   const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
   const { data: deal } = useDeal(dealId)
   const { data: folders } = useFolders()
   const { data: documents, isLoading } = useDocuments(dealId)
   const { data: myPermissions } = useMyPermissions()
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [stageDialogOpen, setStageDialogOpen] = useState(false)
 
   const selectedFolderId = folderId ?? folders?.[0]?.id
 
@@ -206,12 +209,19 @@ export function DealDocuments() {
           <h1 className="text-title-page text-text-primary">{deal.name}</h1>
           <DealStagePill stage={deal.stage} />
         </div>
-        {canContributeAnywhere && (!dealClosed || deal.allow_uploads_when_closed) && (
-          <Button onClick={() => setUploadOpen(true)}>
-            <Upload className="h-4 w-4" />
-            Upload files
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {user?.role === "admin" && (
+            <Button variant="secondary" onClick={() => setStageDialogOpen(true)}>
+              Change stage
+            </Button>
+          )}
+          {canContributeAnywhere && (!dealClosed || deal.allow_uploads_when_closed) && (
+            <Button onClick={() => setUploadOpen(true)}>
+              <Upload className="h-4 w-4" />
+              Upload files
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="mb-4 flex h-10 items-center gap-6 border-b border-border">
@@ -337,6 +347,8 @@ export function DealDocuments() {
           defaultFolderId={selectedFolderId}
         />
       )}
+
+      <StageChangeDialog open={stageDialogOpen} onOpenChange={setStageDialogOpen} deal={deal} />
     </div>
   )
 }
