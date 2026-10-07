@@ -73,10 +73,15 @@ async def download_document(
     doc = await db.get(Document, doc_id)
     if doc is None or doc.deal_id != deal_id:
         raise HTTPException(status_code=404, detail="Document not found")
-    if doc.status not in ("active", "delete_requested"):
+    # PRD F10: admin can download from the Archive too — folder access
+    # doesn't apply there since Archive is already admin-only.
+    if doc.status == "archived":
+        if user.role != "admin":
+            raise HTTPException(status_code=404, detail="Document not found")
+    elif doc.status not in ("active", "delete_requested"):
         raise HTTPException(status_code=404, detail="Document not found")
-
-    await check_folder_access(db, user, doc.folder_id, "view")
+    else:
+        await check_folder_access(db, user, doc.folder_id, "view")
 
     url = presigned_download_url(doc.object_key, doc.display_name)
     return RedirectResponse(url, status_code=302)

@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
-from app.routers import admin, approvals, auth, comments, deals, documents, folders, tasks, upload
+from app.routers import admin, approvals, auth, comments, deals, documents, folders, tasks, upload, users
 from app.storage import ensure_bucket
 
 app = FastAPI(title="Lilkis Deal Room API")
@@ -31,6 +31,7 @@ app.include_router(tasks.router)
 app.include_router(comments.router)
 app.include_router(approvals.router)
 app.include_router(admin.router)
+app.include_router(users.router)
 
 
 @app.get("/health")

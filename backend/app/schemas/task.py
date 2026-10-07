@@ -55,6 +55,18 @@ class TaskListItem(BaseModel):
     deal_name: str | None = None  # populated only for the cross-deal My Tasks view
 
 
+class TaskAttachmentItem(BaseModel):
+    """PRD F6: a document the viewer can't see renders as a lock icon
+    plus "Restricted document" — no name, size or link. restricted=True
+    means every other field here is a placeholder, not real data."""
+
+    document_id: uuid.UUID
+    restricted: bool
+    display_name: str | None = None
+    folder_name: str | None = None
+    status: str | None = None
+
+
 class TaskDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -77,3 +89,4 @@ class TaskDetail(BaseModel):
     created_at: datetime
     updated_at: datetime
     pending_reassignment_to: str | None = None
+    attachments: list[TaskAttachmentItem] = []

@@ -1,0 +1,68 @@
+/* Inter, self-hosted per DESIGN.md §3.2 in production — using Google
+   Fonts here for local dev to avoid shipping binary woff2 files through
+   this session; swap for public/fonts/ + @font-face before Phase 3. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Brand — DESIGN.md §3.1 */
+  --brand-50: #f2f7f2;
+  --brand-100: #dff0df;
+  --brand-600: #22ad01;
+  --brand-700: #177a01;
+  --brand-800: #136401;
+  --brand-900: #0f5001;
+
+  /* Canvas / Surface */
+  --canvas: #f6f7f6;
+  --surface: #ffffff;
+  --surface-sunken: #f9faf9;
+  --surface-hover: #f2f5f2;
+
+  /* Border */
+  --border: #e3e6e3;
+  --border-strong: #cdd2cd;
+  --border-danger: #fda29b;
+
+  /* Text */
+  --text-primary: #1b1f1c;
+  --text-secondary: #4a514c;
+  --text-tertiary: #6b726d;
+  --text-disabled: #9aa19c;
+  --text-inverse: #ffffff;
+
+  --text-danger: #b42318;
+  --text-warning: #8a5a00;
+  --text-info: #1e5aa8;
+
+  /* Banners */
+  --danger-50: #fbe9e7;
+  --warning-50: #fdf3dc;
+  --info-50: #e8f0fa;
+  --danger-700: #b42318;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+/* DESIGN.md §3.2 — tabular figures on numeric cells only, never a whole
+   date string ("5 Jan 2026" gets a visible gap after the day otherwise). */
+.tabular-nums {
+  font-feature-settings: "tnum" 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

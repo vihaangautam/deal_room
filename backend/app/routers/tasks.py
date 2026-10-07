@@ -6,11 +6,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.deps import check_folder_access, require_password_set
+from app.deps import accessible_folder_ids, check_folder_access, require_password_set
 from app.models.approval import ApprovalRequest
 from app.models.audit import AuditLog
 from app.models.deal import Deal
 from app.models.document import Document
+from app.models.folder import FolderTemplate
 from app.models.task import Task, TaskAttachment
 from app.models.user import User
 from app.schemas.document import (
@@ -22,6 +23,7 @@ from app.schemas.task import (
     AssignRequest,
     AttachLinkRequest,
     StatusChangeRequest,
+    TaskAttachmentItem,
     TaskCreate,
     TaskDetail,
     TaskListItem,
@@ -160,10 +162,10 @@ async def create_task(
         )
     )
     await db.commit()
-    return await _task_detail(db, task.id)
+    return await _task_detail(db, task.id, user)
 
 
-async def _task_detail(db: AsyncSession, task_id: uuid.UUID) -> TaskDetail:
+async def _task_detail(db: AsyncSession, task_id: uuid.UUID, user: User) -> TaskDetail:
     task = await db.get(Task, task_id)
     if task is None or task.deleted:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -183,6 +185,30 @@ async def _task_detail(db: AsyncSession, task_id: uuid.UUID) -> TaskDetail:
     if pending:
         target = await db.get(User, pending.proposed_assignee)
         pending_reassignment_to = target.display_name if target else None
+
+    # PRD F6: an attachment in a folder the viewer can't see renders as
+    # "Restricted document" — no name, size or link.
+    folder_ids = await accessible_folder_ids(db, user)
+    attachments: list[TaskAttachmentItem] = []
+    attachment_rows = await db.execute(
+        select(Document.id, Document.display_name, Document.folder_id, Document.status)
+        .join(TaskAttachment, TaskAttachment.document_id == Document.id)
+        .where(TaskAttachment.task_id == task_id)
+    )
+    for doc_id, display_name, folder_id, status in attachment_rows:
+        if folder_ids is not None and folder_id not in folder_ids:
+            attachments.append(TaskAttachmentItem(document_id=doc_id, restricted=True))
+            continue
+        folder = await db.get(FolderTemplate, folder_id)
+        attachments.append(
+            TaskAttachmentItem(
+                document_id=doc_id,
+                restricted=False,
+                display_name=display_name,
+                folder_name=folder.name if folder else None,
+                status=status,
+            )
+        )
 
     return TaskDetail(
         id=task.id,
@@ -204,6 +230,7 @@ async def _task_detail(db: AsyncSession, task_id: uuid.UUID) -> TaskDetail:
         created_at=task.created_at,
         updated_at=task.updated_at,
         pending_reassignment_to=pending_reassignment_to,
+        attachments=attachments,
     )
 
 
@@ -212,9 +239,9 @@ async def get_task(
     deal_id: uuid.UUID,
     task_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_password_set),
+    user: User = Depends(require_password_set),
 ) -> TaskDetail:
-    return await _task_detail(db, task_id)
+    return await _task_detail(db, task_id, user)
 
 
 def _can_edit_description(task: Task, user: User) -> bool:
@@ -257,7 +284,7 @@ async def update_task(
         setattr(task, field, value)
 
     await db.commit()
-    return await _task_detail(db, task_id)
+    return await _task_detail(db, task_id, user)
 
 
 @router.post("/deals/{deal_id}/tasks/{task_id}/assign", response_model=TaskDetail)
@@ -291,7 +318,7 @@ async def assign_task(
             )
         )
         await db.commit()
-        return await _task_detail(db, task_id)
+        return await _task_detail(db, task_id, user)
 
     if task.assigned_to == body.assignee_id:
         raise HTTPException(status_code=409, detail="Already assigned to this person")
@@ -311,7 +338,7 @@ async def assign_task(
             )
         )
         await db.commit()
-        return await _task_detail(db, task_id)
+        return await _task_detail(db, task_id, user)
 
     existing = await db.scalar(
         select(ApprovalRequest).where(
@@ -343,7 +370,7 @@ async def assign_task(
         )
     )
     await db.commit()
-    return await _task_detail(db, task_id)
+    return await _task_detail(db, task_id, user)
 
 
 def _can_change_status(task: Task, user: User, to_status: str) -> bool:
@@ -372,7 +399,7 @@ async def change_status(
 
     task.status = body.status
     await db.commit()
-    return await _task_detail(db, task_id)
+    return await _task_detail(db, task_id, user)
 
 
 @router.post("/deals/{deal_id}/tasks/{task_id}/submit", response_model=TaskDetail)
@@ -401,7 +428,7 @@ async def submit_task(
     task.status = "submitted" if has_pending else "done"
     task.needs_attention = False
     await db.commit()
-    return await _task_detail(db, task_id)
+    return await _task_detail(db, task_id, user)
 
 
 @router.delete("/deals/{deal_id}/tasks/{task_id}")
@@ -486,7 +513,7 @@ async def link_attachment(
 
     db.add(TaskAttachment(task_id=task_id, document_id=doc.id))
     await db.commit()
-    return await _task_detail(db, task_id)
+    return await _task_detail(db, task_id, user)
 
 
 @router.post(

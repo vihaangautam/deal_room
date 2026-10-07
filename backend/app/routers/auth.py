@@ -16,6 +16,7 @@ from app.auth import (
 )
 from app.database import get_db
 from app.models.audit import AuditLog
+from app.models.folder import FolderTemplate, UserFolderPermission
 from app.models.user import User
 from app.schemas.user import ChangePasswordRequest, UserMe
 
@@ -105,6 +106,28 @@ async def login(
 @router.get("/me", response_model=UserMe)
 async def me(user: User = Depends(current_active_user)) -> User:
     return user
+
+
+@router.get("/my-permissions")
+async def my_permissions(
+    db: AsyncSession = Depends(get_db), user: User = Depends(current_active_user)
+) -> dict[str, str]:
+    """DESIGN.md §5.3: a folder the viewer has no access to still renders
+    (with a lock icon), so the frontend needs its own access level per
+    folder, not just the documents it can already see. Admin isn't in
+    user_folder_permissions at all (it bypasses that table entirely per
+    ARCHITECTURE.md §2.2), so admins get every known folder as
+    'contribute' here rather than an empty map."""
+    if user.role == "admin":
+        folder_ids = await db.scalars(select(FolderTemplate.id))
+        return {str(folder_id): "contribute" for folder_id in folder_ids}
+
+    rows = await db.execute(
+        select(UserFolderPermission.folder_id, UserFolderPermission.access_level).where(
+            UserFolderPermission.user_id == user.id
+        )
+    )
+    return {str(folder_id): level for folder_id, level in rows}
 
 
 @router.post("/change-password")
