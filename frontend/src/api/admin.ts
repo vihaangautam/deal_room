@@ -144,3 +144,47 @@ export function useAuditLog(filters?: AuditFilters) {
     queryFn: () => apiFetch<AuditLogItem[]>(`/admin/audit-log${qs ? `?${qs}` : ""}`),
   })
 }
+
+
+export interface Settings {
+  archive_retention_days: number | null
+  rejected_upload_purge_days: number
+}
+
+export function useSettings() {
+  return useQuery({
+    queryKey: ["admin", "settings"],
+    queryFn: () => apiFetch<Settings>("/admin/settings"),
+  })
+}
+
+export function useUpdateSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { archive_retention_days: number | null }) =>
+      apiFetch<Settings>("/admin/settings", { method: "PATCH", body }),
+    onSuccess: (settings) => {
+      qc.invalidateQueries({ queryKey: ["admin", "settings"] })
+      toast(
+        settings.archive_retention_days === null
+          ? "Archive files are now kept forever."
+          : `Archive files are now kept for ${RETENTION_LABEL[settings.archive_retention_days] ?? `${settings.archive_retention_days} days`}.`,
+      )
+    },
+  })
+}
+
+// PRD F11's four choices. 2,555 days is seven years — the number Samir
+// would recognise, not the one the API stores.
+export const RETENTION_CHOICES: { value: number | null; label: string }[] = [
+  { value: null, label: "Keep forever" },
+  { value: 30, label: "30 days" },
+  { value: 365, label: "1 year" },
+  { value: 2555, label: "7 years" },
+]
+
+export const RETENTION_LABEL: Record<number, string> = {
+  30: "30 days",
+  365: "1 year",
+  2555: "7 years",
+}

@@ -1,5 +1,13 @@
 import { useState } from "react"
-import { useArchive, usePurgeDocument, useRestoreDocument } from "@/api/admin"
+import {
+  RETENTION_CHOICES,
+  RETENTION_LABEL,
+  useArchive,
+  usePurgeDocument,
+  useRestoreDocument,
+  useSettings,
+  useUpdateSettings,
+} from "@/api/admin"
 import { documentDownloadUrl } from "@/api/documents"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
@@ -37,18 +45,85 @@ function PurgeDialog({
   )
 }
 
+function RetentionDialog({
+  open,
+  onOpenChange,
+  current,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  current: number | null
+}) {
+  const updateSettings = useUpdateSettings()
+  const [choice, setChoice] = useState<number | null>(current)
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title="How long should the Archive keep files?" width={440}>
+      <p className="mb-3 text-body text-text-secondary">
+        Files past this age are removed from storage for good. The record of who uploaded and
+        deleted them is always kept.
+      </p>
+      <div className="flex flex-col gap-1">
+        {RETENTION_CHOICES.map((option) => (
+          <label
+            key={String(option.value)}
+            className="flex h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-body text-text-primary hover:bg-surface-hover"
+          >
+            <input
+              type="radio"
+              name="retention"
+              checked={choice === option.value}
+              onChange={() => setChoice(option.value)}
+            />
+            {option.label}
+          </label>
+        ))}
+      </div>
+      <DialogFooter>
+        <Button variant="secondary" onClick={() => onOpenChange(false)}>
+          Cancel
+        </Button>
+        <Button
+          loading={updateSettings.isPending}
+          onClick={async () => {
+            await updateSettings.mutateAsync({ archive_retention_days: choice })
+            onOpenChange(false)
+          }}
+        >
+          Save
+        </Button>
+      </DialogFooter>
+    </Dialog>
+  )
+}
+
 export function Archive() {
   const { data: items, isLoading } = useArchive()
+  const { data: settings } = useSettings()
   const restore = useRestoreDocument()
   const purge = usePurgeDocument()
   const [purgeTarget, setPurgeTarget] = useState<ArchiveItem | null>(null)
+  const [retentionOpen, setRetentionOpen] = useState(false)
+
+  const retention = settings?.archive_retention_days ?? null
+  const retentionLabel = retention === null ? "Keep forever" : (RETENTION_LABEL[retention] ?? `${retention} days`)
 
   return (
     <div className="px-6 py-6">
       <h1 className="mb-1 text-title-page text-text-primary">Archive</h1>
-      <p className="mb-4 text-table text-text-tertiary">
-        Files approved for deletion. Kept until you remove them under retention settings.
-      </p>
+      <div className="mb-4 flex items-baseline justify-between">
+        <p className="text-table text-text-tertiary">
+          Files approved for deletion. Kept until you remove them under retention settings.
+        </p>
+        {/* DESIGN.md §6.10: "A retention link sits at the right of the
+            toolbar: Retention: Keep forever — Change." */}
+        <p className="text-table text-text-tertiary">
+          Retention: {retentionLabel} —{" "}
+          <button type="button" className="text-brand-700 hover:underline" onClick={() => setRetentionOpen(true)}>
+            Change
+          </button>
+        </p>
+      </div>
 
       <div className="rounded-md border border-border">
         <table className="w-full">
@@ -107,6 +182,8 @@ export function Archive() {
           </tbody>
         </table>
       </div>
+
+      <RetentionDialog open={retentionOpen} onOpenChange={setRetentionOpen} current={retention} />
 
       <PurgeDialog
         item={purgeTarget}

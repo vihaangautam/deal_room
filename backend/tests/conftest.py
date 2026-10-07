@@ -12,7 +12,7 @@ import asyncio
 import importlib.util
 import sys
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
 
 import asyncpg
@@ -24,6 +24,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
+from app.jobs import purge as purge_job
+from app.routers import upload as upload_router
 
 # asyncpg + Windows' default ProactorEventLoop don't close cleanly
 # together (a harmless but noisy AttributeError during connection
@@ -210,3 +212,21 @@ async def create_deal(
     await db.commit()
     await db.refresh(deal)
     return deal
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _isolate_chunk_dir(tmp_path_factory: pytest.TempPathFactory) -> Generator[None, None, None]:
+    """Upload chunks stage in the system temp directory, which the dev
+    server on this machine is also using. Without this, the purge job's
+    orphan sweep — run for real by test_purge.py — deletes the chunks of
+    whatever upload is in flight outside the tests, because those document
+    ids aren't in the test database.
+    """
+    chunk_dir = tmp_path_factory.mktemp("lilkis_chunks")
+    original_upload, original_purge = upload_router.CHUNK_DIR, purge_job.CHUNK_DIR
+    # Patched in both modules: purge.py imported the value, not the module.
+    upload_router.CHUNK_DIR = chunk_dir
+    purge_job.CHUNK_DIR = chunk_dir
+    yield
+    upload_router.CHUNK_DIR = original_upload
+    purge_job.CHUNK_DIR = original_purge
