@@ -18,6 +18,9 @@ export function useCreateUser() {
       email: string
       role: "admin" | "member"
       can_approve: boolean
+      // DESIGN §6.9 generates this in the dialog so it can be copied
+      // before the user exists; omitting it lets the server pick one.
+      temporary_password?: string
       folder_levels: Record<string, string>
     }) => apiFetch<{ id: string; display_name: string; email: string; temporary_password: string }>(
       "/admin/users",

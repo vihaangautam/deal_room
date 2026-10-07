@@ -12,6 +12,7 @@ import {
 } from "@/api/tasks"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { CommentThread } from "@/components/CommentThread"
+import { UserName } from "@/components/UserName"
 import { useDeal } from "@/api/deals"
 import { useDocuments } from "@/api/documents"
 import { useFolders } from "@/api/folders"
@@ -106,8 +107,8 @@ export function TaskDetail() {
   )
 
   return (
-    <div className="flex gap-6 px-6 py-6">
-      <div className="min-w-[560px] flex-1">
+    <div className="mx-auto flex max-w-content flex-col-reverse gap-5 px-6 py-6 md:flex-row">
+      <div className="min-w-0 flex-1 xl:min-w-[560px]">
         <p className="mb-1 text-meta text-text-tertiary">{task.key}</p>
         <h1 className="mb-4 text-title-task text-text-primary">{task.title}</h1>
 
@@ -215,7 +216,9 @@ export function TaskDetail() {
         </div>
       </div>
 
-      <aside className="w-80 shrink-0 rounded-md border border-border p-4">
+      {/* DESIGN §9: 320px, 280px from 1024-1279, and above the
+          description below 768. */}
+      <aside className="w-full shrink-0 rounded-md border border-border p-4 md:w-[280px] xl:w-80">
         <h2 className="mb-2 text-label text-text-tertiary">Status</h2>
         <select
           value={task.status}
@@ -249,7 +252,7 @@ export function TaskDetail() {
         <h2 className="mb-2 text-label text-text-tertiary">Details</h2>
         <dl className="flex flex-col gap-2 text-table">
           <Detail label="Assignee">
-            {task.assignee_name ?? "Unassigned"}
+            <UserName name={task.assignee_name} fallback="Unassigned" id={task.assignee_id} />
             {!dealClosed && !task.assignee_id && user && (
               <button
                 type="button"
@@ -265,8 +268,12 @@ export function TaskDetail() {
               Reassignment to {task.pending_reassignment_to} waiting for approval
             </p>
           )}
-          <Detail label="Reporter">{task.reporter_name}</Detail>
-          <Detail label="Assigned by">{task.assigned_by_name ?? "—"}</Detail>
+          <Detail label="Reporter">
+            <UserName name={task.reporter_name} id={task.reporter_id} />
+          </Detail>
+          <Detail label="Assigned by">
+            <UserName name={task.assigned_by_name} id={task.assigned_by_id} />
+          </Detail>
           <Detail label="Start date">{task.start_date ? formatDate(task.start_date) : "—"}</Detail>
           <Detail label="Due date">{task.due_date ? formatDate(task.due_date) : "—"}</Detail>
           <Detail label="Created">{formatDate(task.created_at)}</Detail>

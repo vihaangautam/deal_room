@@ -3,6 +3,7 @@ import { useAdminUsers, useCreateUser, usePermissionMatrix, useResetPassword, us
 import { useFolders } from "@/api/folders"
 import { Button } from "@/components/ui/button"
 import { PageBody } from "@/components/PageBody"
+import { UseALaptop } from "@/components/UseALaptop"
 import { Tab, TabBand } from "@/components/TabBand"
 import { TableFooter } from "@/components/TableFooter"
 import { PageHeader } from "@/components/PageHeader"
@@ -21,13 +22,42 @@ const ACCESS_STYLE: Record<AccessLevel, string> = {
 }
 const ACCESS_LABEL: Record<AccessLevel, string> = { none: "None", view: "View", contribute: "Contribute" }
 
+// DESIGN §6.9: "Temporary password (generated 14 characters, with Copy
+// and Regenerate)". Generated in the browser and shown before the user is
+// created, so the admin can copy it while they are still on the phone to
+// the person — the server accepts it as temporary_password rather than
+// inventing its own.
+const PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+
+function generatePassword(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(14))
+  // No 0/O/1/l/I: this gets read down a phone line.
+  return Array.from(bytes, (b) => PASSWORD_ALPHABET[b % PASSWORD_ALPHABET.length]).join("")
+}
+
 function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const createUser = useCreateUser()
+  const { data: users } = useAdminUsers()
+  const { data: permissions } = usePermissionMatrix()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [role, setRole] = useState<"admin" | "member">("member")
   const [canApprove, setCanApprove] = useState(false)
+  const [password, setPassword] = useState(generatePassword)
+  const [copyFrom, setCopyFrom] = useState("")
+  const [copied, setCopied] = useState(false)
   const [result, setResult] = useState<{ email: string; temporary_password: string } | null>(null)
+
+  // "Copy folder access from (a user, or Set manually)" — read off the
+  // permission matrix that is already loaded for the other tab.
+  const folderLevels =
+    copyFrom === ""
+      ? {}
+      : Object.fromEntries(
+          (permissions ?? [])
+            .filter((row) => row.user_id === copyFrom)
+            .map((row) => [row.folder_id, row.access_level]),
+        )
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -36,7 +66,8 @@ function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
       email,
       role,
       can_approve: canApprove,
-      folder_levels: {},
+      temporary_password: password,
+      folder_levels: folderLevels,
     })
     setResult(res)
   }
@@ -46,6 +77,9 @@ function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
     setEmail("")
     setRole("member")
     setCanApprove(false)
+    setPassword(generatePassword())
+    setCopyFrom("")
+    setCopied(false)
     setResult(null)
     onOpenChange(false)
   }
@@ -54,7 +88,7 @@ function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
     return (
       <Dialog open={open} onOpenChange={handleClose} title="User created" width={440}>
         <p className="text-body text-text-secondary">
-          Give them this password directly. They&apos;ll choose a new one when they first sign in.
+          {name || "They"} can sign in with this straight away.
         </p>
         <div className="mt-3 rounded-md bg-surface-sunken p-3">
           <p className="text-meta text-text-tertiary">{result.email}</p>
@@ -92,12 +126,68 @@ function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
           <input type="checkbox" checked={canApprove} onChange={(e) => setCanApprove(e.target.checked)} />
           Can approve requests
         </label>
+
+        <Field
+          label="Temporary password"
+          htmlFor="u-password"
+          helper="Give them this password directly. They'll choose a new one when they first sign in."
+        >
+          <div className="flex gap-2">
+            <Input id="u-password" readOnly value={password} className="font-mono" />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={async () => {
+                await navigator.clipboard.writeText(password)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+              }}
+            >
+              {copied ? "Copied" : "Copy"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setPassword(generatePassword())
+                setCopied(false)
+              }}
+            >
+              Regenerate
+            </Button>
+          </div>
+        </Field>
+
+        <Field
+          label="Copy folder access from"
+          htmlFor="u-copy"
+          helper="Or set it manually afterwards in Folder access."
+        >
+          <select
+            id="u-copy"
+            value={copyFrom}
+            onChange={(e) => setCopyFrom(e.target.value)}
+            className="h-9 rounded-md border border-border-strong bg-surface px-2 text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-600"
+          >
+            <option value="">Set manually</option>
+            {(users ?? [])
+              .filter((u) => u.is_active)
+              .map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.display_name}
+                </option>
+              ))}
+          </select>
+        </Field>
+
         <DialogFooter>
           <Button type="button" variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
           <Button type="submit" loading={createUser.isPending}>
-            Save
+            Add user
           </Button>
         </DialogFooter>
       </form>
@@ -195,11 +285,15 @@ function PermissionMatrixTab() {
   const setPermission = useSetPermission()
 
   function levelFor(userId: string, folderId: string): AccessLevel {
-    return (matrix?.find((m) => m.user_id === userId && m.folder_id === folderId)?.access_level ?? "none") as AccessLevel
+    return (
+      matrix?.find((m) => m.user_id === userId && m.folder_id === folderId)?.access_level ?? "none"
+    ) as AccessLevel
   }
 
   return (
-    <div className="w-full max-w-full overflow-x-auto rounded-md border border-border">
+    <>
+      <UseALaptop what="The permission matrix is too wide to use on a phone." />
+      <div className="w-full max-w-full overflow-x-auto rounded-md border border-border max-md:hidden">
       <table className="w-max min-w-full border-separate border-spacing-0">
         <thead>
           <tr className="h-10 bg-surface-sunken text-left text-label text-text-tertiary">
@@ -266,7 +360,8 @@ function PermissionMatrixTab() {
           ))}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   )
 }
 

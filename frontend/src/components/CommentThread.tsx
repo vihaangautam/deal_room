@@ -3,6 +3,7 @@ import { useComments, useCreateComment, useDeleteComment, useEditComment } from 
 import { useAuthStore } from "@/stores/auth"
 import { Button } from "@/components/ui/button"
 import { Avatar } from "@/components/ui/avatar"
+import { UserName } from "@/components/UserName"
 import { formatDateTime } from "@/lib/utils"
 import type { Comment } from "@/api/types"
 
@@ -84,7 +85,9 @@ function CommentBody({
   return (
     <div className="flex-1">
       <div className="flex items-center gap-2">
-        <span className="text-body-strong text-text-primary">{comment.author_name}</span>
+        <span className="text-body-strong text-text-primary">
+          <UserName name={comment.author_name} id={comment.author_id} />
+        </span>
         <span className="text-meta text-text-tertiary">{formatDateTime(comment.created_at)}</span>
         {comment.edited && <span className="text-meta text-text-tertiary">Edited</span>}
       </div>

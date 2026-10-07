@@ -1,6 +1,7 @@
 import { useRef, useState } from "react"
 import { FileText, RotateCw, UploadCloud } from "lucide-react"
 import { Dialog } from "@/components/ui/dialog"
+import { UseALaptop } from "@/components/UseALaptop"
 import { Button } from "@/components/ui/button"
 import { useUpload, type UploadItem } from "@/hooks/useUpload"
 import { formatBytes } from "@/lib/utils"
@@ -106,7 +107,8 @@ export function MultiFileUploadDialog({
       title={title ?? `Upload to ${dealName}`}
       width={640}
     >
-      <div className="flex flex-col gap-4">
+      <UseALaptop what="Uploading files needs a bigger screen." />
+      <div className="flex flex-col gap-4 max-md:hidden">
         <label className="flex flex-col gap-1.5">
           <span className="text-body-strong text-text-primary">Folder</span>
           <select

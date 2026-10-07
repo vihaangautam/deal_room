@@ -1,4 +1,5 @@
 import { Avatar } from "@/components/ui/avatar"
+import { UserName } from "@/components/UserName"
 import { formatDateTime } from "@/lib/utils"
 import type { AuditLogItem } from "@/api/types"
 
@@ -100,7 +101,9 @@ export function ActivityFeed({
           </span>
           <Avatar name={item.actor_name ?? "·"} id={item.actor_id} size={20} />
           <span className="text-table text-text-secondary">
-            <span className="font-medium text-text-primary">{item.actor_name ?? "Someone"}</span>{" "}
+            <span className="font-medium text-text-primary">
+              <UserName name={item.actor_name} id={item.actor_id} fallback="Someone" />
+            </span>{" "}
             {describeActivity(item)}
             {showDeal && item.deal_name && (
               <span className="text-text-tertiary"> in {item.deal_name}</span>

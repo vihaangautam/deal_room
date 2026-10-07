@@ -1,7 +1,8 @@
-import { type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   Archive as ArchiveIcon,
+  Menu as MenuIcon,
   CheckSquare,
   Clock,
   FolderClosed,
@@ -26,6 +27,7 @@ function NavRow({
   count,
   isApprovalBadge = false,
   active,
+  onNavigate,
 }: {
   to: string
   icon: typeof Layers
@@ -33,25 +35,28 @@ function NavRow({
   count?: number | undefined
   isApprovalBadge?: boolean
   active: boolean
+  onNavigate?: () => void
 }) {
   const showCount = count !== undefined && (!isApprovalBadge || count > 0)
   return (
     <Link
       to={to}
+      title={label}
+      onClick={onNavigate}
       className={cn(
-        "relative flex h-9 items-center gap-2 rounded-md px-3 text-body-strong",
+        "relative flex h-9 items-center gap-2 rounded-md px-3 text-body-strong md:justify-center md:px-0 xl:justify-start xl:px-3",
         active ? "bg-brand-50 text-brand-700" : "text-text-secondary hover:bg-surface-hover",
       )}
     >
       {/* In the sidebar's 8px padding, flush to its edge — not inset to
           the row, which left it floating in the middle of the gutter. */}
       {active && <span className="absolute -left-2 top-0 h-full w-[3px] rounded-r bg-brand-600" />}
-      <Icon className="h-4 w-4" aria-hidden />
-      <span className="flex-1">{label}</span>
+      <Icon className="h-4 w-4 shrink-0" aria-hidden />
+      <span className="flex-1 md:hidden xl:inline">{label}</span>
       {showCount && (
         <span
           className={cn(
-            "flex items-center justify-center rounded-full text-[11px] font-semibold",
+            "flex items-center justify-center rounded-full text-[11px] font-semibold md:hidden xl:flex",
             isApprovalBadge
               ? "h-5 w-5 bg-brand-700 text-white"
               : "h-5 min-w-5 px-1.5 bg-[#EEF0EE] text-text-tertiary",
@@ -65,6 +70,7 @@ function NavRow({
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const [navOpen, setNavOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -93,6 +99,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-canvas">
       <header className="flex h-12 items-center justify-between border-b border-border bg-surface px-6">
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Menu"
+            onClick={() => setNavOpen((v) => !v)}
+            className="block text-text-secondary md:hidden"
+          >
+            <MenuIcon className="h-5 w-5" />
+          </button>
           <div className="flex h-5 w-5 items-center justify-center rounded bg-brand-600 text-[11px] font-semibold text-white">
             L
           </div>
@@ -119,13 +133,22 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <div className="flex">
-        <nav className="fixed bottom-0 left-0 top-12 w-[232px] overflow-y-auto border-r border-border bg-surface p-2">
+        <nav className={cn(
+            "fixed bottom-0 left-0 top-12 z-30 overflow-y-auto border-r border-border bg-surface p-2",
+            // DESIGN §9: 64px icon rail from 1024-1279, full width at
+            // 1280+, and off-canvas below 768 behind the menu button.
+            // <768 drawer at full width, 768-1279 a 64px icon rail,
+            // 1280+ the full sidebar.
+            "w-[232px] md:w-16 xl:w-[232px]",
+            navOpen ? "w-[232px]" : "max-md:hidden",
+          )}>
           <div className="flex flex-col gap-1">
             <NavRow
               to="/deals"
               icon={Layers}
               label="Deals"
               count={deals?.length}
+              onNavigate={() => setNavOpen(false)}
               active={location.pathname.startsWith("/deals")}
             />
             <NavRow
@@ -133,13 +156,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               icon={CheckSquare}
               label="My Tasks"
               count={myTasks?.length}
+              onNavigate={() => setNavOpen(false)}
               active={location.pathname === "/my-tasks"}
             />
           </div>
 
           {isAdmin && (
             <div className="mt-6">
-              <div className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
+              <div className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-text-tertiary md:hidden xl:block">
                 Admin
               </div>
               <div className="flex flex-col gap-1">
@@ -149,38 +173,43 @@ export function AppShell({ children }: { children: ReactNode }) {
                   label="Approvals"
                   count={approvals?.length}
                   isApprovalBadge
-                  active={location.pathname === "/admin/approvals"}
+              onNavigate={() => setNavOpen(false)}
+              active={location.pathname === "/admin/approvals"}
                 />
                 <NavRow
                   to="/admin/folders"
                   icon={FolderClosed}
                   label="Folders"
-                  active={location.pathname === "/admin/folders"}
+              onNavigate={() => setNavOpen(false)}
+              active={location.pathname === "/admin/folders"}
                 />
                 <NavRow
                   to="/admin/users"
                   icon={UsersIcon}
                   label="Users & permissions"
-                  active={location.pathname === "/admin/users"}
+              onNavigate={() => setNavOpen(false)}
+              active={location.pathname === "/admin/users"}
                 />
                 <NavRow
                   to="/admin/archive"
                   icon={ArchiveIcon}
                   label="Archive"
-                  active={location.pathname === "/admin/archive"}
+              onNavigate={() => setNavOpen(false)}
+              active={location.pathname === "/admin/archive"}
                 />
                 <NavRow
                   to="/admin/activity"
                   icon={Clock}
                   label="Activity"
-                  active={location.pathname === "/admin/activity"}
+              onNavigate={() => setNavOpen(false)}
+              active={location.pathname === "/admin/activity"}
                 />
               </div>
             </div>
           )}
         </nav>
 
-        <main className="ml-[232px] flex-1 min-w-0">{children}</main>
+        <main className="ml-0 min-w-0 flex-1 md:ml-16 xl:ml-[232px]">{children}</main>
       </div>
     </div>
   )

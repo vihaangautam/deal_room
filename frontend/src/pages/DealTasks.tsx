@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { useCreateTask, useTasks } from "@/api/tasks"
 import { useDeal } from "@/api/deals"
 import { DealHeader } from "@/components/DealHeader"
+import { UserName } from "@/components/UserName"
 import { PageBody } from "@/components/PageBody"
 import { TaskStatusPill, NeedsAttentionPill } from "@/components/StatusPill"
 import { cn, formatDate } from "@/lib/utils"
@@ -49,8 +50,12 @@ function TaskRow({ task, dealId }: { task: TaskListItem; dealId: string }) {
           "—"
         )}
       </td>
-      <td className="px-4 text-table text-text-secondary">{task.assignee_name ?? "Unassigned"}</td>
-      <td className="px-4 text-table text-text-secondary">{task.reporter_name}</td>
+      <td className="px-4 text-table text-text-secondary">
+        <UserName name={task.assignee_name} fallback="Unassigned" />
+      </td>
+      <td className="px-4 text-table text-text-secondary">
+        <UserName name={task.reporter_name} />
+      </td>
     </tr>
   )
 }

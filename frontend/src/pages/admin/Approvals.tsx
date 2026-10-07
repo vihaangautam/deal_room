@@ -3,6 +3,8 @@ import { useApprovals, useBulkApprovalAction } from "@/api/approvals"
 import { Avatar } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { PageBody } from "@/components/PageBody"
+import { UseALaptop } from "@/components/UseALaptop"
+import { UserName } from "@/components/UserName"
 import { PageHeader } from "@/components/PageHeader"
 import { Tab, TabBand } from "@/components/TabBand"
 import { TableFooter } from "@/components/TableFooter"
@@ -145,8 +147,9 @@ export function Approvals() {
       />
 
       <PageBody>
+        <UseALaptop what="Approving in bulk needs a bigger screen. You can still read the queue here." />
         {selected.size > 0 && (
-          <div className="mb-4 flex h-14 items-center gap-3 rounded-lg border border-border bg-brand-50 px-4">
+          <div className="mb-4 flex h-14 items-center gap-3 rounded-lg border border-border bg-brand-50 px-4 max-md:hidden">
             <span className="text-body-strong text-brand-700">{selected.size} selected</span>
             <span className="h-5 w-px bg-border" aria-hidden />
             <Button size="sm" onClick={approveSelected} loading={bulkAction.isPending}>
@@ -169,7 +172,7 @@ export function Approvals() {
         <table className="w-full">
           <thead>
             <tr className="h-9 bg-surface-sunken text-left text-label text-text-tertiary">
-              <th className="w-10 px-4">
+              <th className="w-10 px-4 max-md:hidden">
                 <input
                   type="checkbox"
                   checked={rows.length > 0 && selected.size === rows.length}
@@ -244,7 +247,7 @@ function Row({ row, checked, onToggle }: { row: ApprovalItem; checked: boolean; 
       <td className="px-4 text-table text-text-secondary">
         <span className="flex items-center gap-2">
           <Avatar name={row.requested_by_name} size={20} />
-          {row.requested_by_name}
+          <UserName name={row.requested_by_name} />
         </span>
       </td>
       <td className="px-4 text-meta text-text-tertiary">{formatDateTime(row.requested_at)}</td>

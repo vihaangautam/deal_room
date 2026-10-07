@@ -7,6 +7,7 @@ import { useFolders } from "@/api/folders"
 import { useMyPermissions } from "@/api/permissions"
 import { useAuthStore } from "@/stores/auth"
 import { DealHeader } from "@/components/DealHeader"
+import { UserName } from "@/components/UserName"
 import { PageBody } from "@/components/PageBody"
 import { DocumentStatusPill } from "@/components/StatusPill"
 import { Button } from "@/components/ui/button"
@@ -158,7 +159,9 @@ function FileRow({
       <td className="px-4 text-right tabular-nums text-table text-text-secondary">
         {formatBytes(doc.size_bytes)}
       </td>
-      <td className="px-4 text-table text-text-secondary">{doc.uploaded_by_name}</td>
+      <td className="px-4 text-table text-text-secondary">
+        <UserName name={doc.uploaded_by_name} />
+      </td>
       <td className="px-4 text-right tabular-nums text-table text-text-secondary">
         {formatDate(doc.created_at)}
       </td>
@@ -262,8 +265,23 @@ export function DealDocuments() {
         </div>
       )}
 
-      <div className="flex gap-6">
-        <div className="w-[260px] shrink-0 rounded-md border border-border">
+      <div className="flex flex-col gap-5 lg:flex-row">
+        {/* DESIGN §9: below 1024 the folder list becomes a select above
+            the file table. */}
+        <select
+          aria-label="Folder"
+          value={selectedFolderId ?? ""}
+          onChange={(e) => navigate(`/deals/${dealId}/documents/${e.target.value}`)}
+          className="block h-9 rounded-md border border-border-strong bg-surface px-2 text-body lg:hidden"
+        >
+          {folders?.map((folder) => (
+            <option key={folder.id} value={folder.id}>
+              {folder.name} ({folderDocCounts.get(folder.id) ?? 0})
+            </option>
+          ))}
+        </select>
+
+        <div className="hidden shrink-0 rounded-md border border-border lg:block lg:w-[220px] xl:w-[260px]">
           {folders?.map((folder) => {
             const access = myPermissions?.[folder.id] ?? "none"
             const locked = access === "none"

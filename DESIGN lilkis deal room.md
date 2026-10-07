@@ -158,7 +158,7 @@ At most three sizes per view region. Never bold a whole paragraph.
 │ 48px top bar   [L] Lilkis Deal Room          [SB] Samir Biyani │
 │                                                          Admin  │
 ├────────────┬───────────────────────────────────────────────────┤
-│  232px     │  Content — full width, 24px gutters               │
+│  232px     │  Content — max 1400px centred, 24px gutters       │
 │  sidebar   │  bg: canvas                                       │
 │  fixed     │                                                   │
 └────────────┴───────────────────────────────────────────────────┘
@@ -171,7 +171,7 @@ At most three sizes per view region. Never bold a whole paragraph.
 
 No global search (each page has its own, scoped). No notification bell — notifications are a PRD §3 non-goal, and a bell that does nothing is a lie on screen.
 
-**Content area.** No max-width. A 1200px cap letterboxes the approvals table on a 1440px screen, and this tool is read at a desk on wide monitors.
+**Content area.** 24px gutters, capped at 1400px and centred. A 1200px cap letterboxes the approvals table on a 1440px screen; 1400px keeps the wide tables full on a 1440px laptop while stopping a row from running the whole width of a 1920px monitor, where the eye loses the line between the first and last column. The header and tab bands run edge to edge so their bottom borders do, but their contents sit in the same 1400px column, so the search lines up with the table it filters.
 
 ### 4.2 Sidebar
 

@@ -47,3 +47,41 @@ async def test_settings_are_admin_only(client: AsyncClient, db: AsyncSession) ->
     assert (
         await client.patch("/admin/settings", json={"archive_retention_days": 30})
     ).status_code == 403
+
+
+async def test_new_user_can_be_given_a_password_and_copied_access(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    """DESIGN §6.9's add-user dialog generates the temporary password in
+    the browser so the admin can copy it before the user exists, and can
+    seed folder access from an existing colleague. Both fields were
+    accepted by the API long before anything sent them."""
+    from conftest import create_folder
+
+    admin = await create_user(db, "admin@lilkis.in", role="admin")
+    legal = await create_folder(db, "Legal", admin.id)
+    bank = await create_folder(db, "Bank documents", admin.id)
+    await login(client, "admin@lilkis.in")
+
+    resp = await client.post(
+        "/admin/users",
+        json={
+            "display_name": "Priya Nair",
+            "email": "priya@lilkis.in",
+            "role": "member",
+            "can_approve": False,
+            "temporary_password": "dXjBY6yx7YNPw6",
+            "folder_levels": {str(legal.id): "view", str(bank.id): "contribute"},
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    # echoed back verbatim: the admin already read this one out
+    assert resp.json()["temporary_password"] == "dXjBY6yx7YNPw6"
+
+    # and it is the password that actually works, after the forced change
+    await login(client, "priya@lilkis.in", "dXjBY6yx7YNPw6")
+    assert (await client.get("/auth/me")).json()["must_change_password"] is True
+
+    levels = (await client.get("/auth/my-permissions")).json()
+    assert levels[str(legal.id)] == "view"
+    assert levels[str(bank.id)] == "contribute"

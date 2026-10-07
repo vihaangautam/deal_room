@@ -41,7 +41,7 @@ export function StageChangeDialog({
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
-  deal: DealDetail
+  deal: Pick<DealDetail, "id" | "name" | "stage">
 }) {
   const changeStage = useChangeStage(deal.id)
   const { data: history } = useDealStageHistory(deal.id)

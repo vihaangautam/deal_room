@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input"
 import { Field } from "@/components/ui/field"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { DealStagePill } from "@/components/StatusPill"
+import { StageChangeDialog } from "@/components/StageChangeDialog"
+import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { cn, formatDate } from "@/lib/utils"
 import type { DealListItem } from "@/api/types"
 
@@ -188,13 +190,14 @@ export function DealsHome() {
               {tab === "running" && <th className="px-4 text-right font-medium">Tasks</th>}
               <th className="px-4 text-right font-medium">Last activity</th>
               <th className="px-4 text-right font-medium">Created</th>
+              <th className="w-10 px-2" />
             </tr>
           </thead>
           <tbody>
             {isLoading &&
               [0, 1, 2].map((i) => (
                 <tr key={i} className="h-10 border-t border-border">
-                  <td colSpan={6} className="px-4">
+                  <td colSpan={7} className="px-4">
                     <div className="h-3 w-1/3 animate-pulse rounded bg-surface-sunken" />
                   </td>
                 </tr>
@@ -236,8 +239,11 @@ function DealRow({
   showTasks: boolean
   onOpen: () => void
 }) {
+  const user = useAuthStore((s) => s.user)
+  const [stageOpen, setStageOpen] = useState(false)
+
   return (
-    <tr className="h-10 border-t border-border hover:bg-surface-hover">
+    <tr className="group h-10 border-t border-border hover:bg-surface-hover">
       <td className="px-4">
         <button type="button" onClick={onOpen} className="text-left">
           <span className="block text-table font-medium text-text-primary">{deal.name}</span>
@@ -262,6 +268,17 @@ function DealRow({
       </td>
       <td className="px-4 text-right text-meta text-text-tertiary">
         {formatDate(deal.created_at)}
+      </td>
+      <td className="w-10 px-2">
+        {/* PRD §7's permission matrix gives exactly one deal-level action,
+            and only to admin: change stage (and reopen). A member gets no
+            menu rather than a menu of nothing. */}
+        {user?.role === "admin" && (
+          <RowMenu>
+            <RowMenuItem onSelect={() => setStageOpen(true)}>Change stage</RowMenuItem>
+          </RowMenu>
+        )}
+        <StageChangeDialog open={stageOpen} onOpenChange={setStageOpen} deal={deal} />
       </td>
     </tr>
   )
