@@ -208,7 +208,12 @@ async def complete_upload(
                 action="document.uploaded",
                 entity_type="document",
                 entity_id=str(doc.id),
-                detail={"deal_id": str(doc.deal_id), "folder_id": str(doc.folder_id), "auto_approved": True},
+                detail={
+                    "name": doc.display_name,
+                    "deal_id": str(doc.deal_id),
+                    "folder_id": str(doc.folder_id),
+                    "auto_approved": True,
+                },
             )
         )
     else:
@@ -224,7 +229,11 @@ async def complete_upload(
                 action="document.uploaded",
                 entity_type="document",
                 entity_id=str(doc.id),
-                detail={"deal_id": str(doc.deal_id), "folder_id": str(doc.folder_id)},
+                detail={
+                    "name": doc.display_name,
+                    "deal_id": str(doc.deal_id),
+                    "folder_id": str(doc.folder_id),
+                },
             )
         )
 
