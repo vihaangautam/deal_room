@@ -1,0 +1,12 @@
+# The venv is Windows-built and useless in a Linux image; tests and their
+# caches have no business in a production image.
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+*.egg-info
+tests
+.env
+.env.*

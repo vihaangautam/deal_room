@@ -1,0 +1,9 @@
+# Without this the whole node_modules is sent as build context — slow, and
+# fatal here: a leftover .pnpm tree from an early pnpm attempt contains
+# symlinks Docker refuses to pack ("invalid file request"). The image
+# installs its own dependencies from package-lock.json anyway.
+node_modules
+dist
+.env
+.env.*
+*.log

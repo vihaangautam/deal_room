@@ -3,7 +3,12 @@
 
 import { useAuthStore } from "@/stores/auth"
 
-const BASE = import.meta.env.VITE_API_URL as string
+// Empty means same-origin, which is how the production image is built:
+// nginx proxies the API on the same host, so no absolute URL is needed.
+// The ?? "" matters — an undefined VITE_API_URL used to produce
+// fetch("undefined/auth/me"), which Vite's SPA fallback answered with
+// index.html and a 200, so the app rendered as signed in with no user.
+const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? ""
 
 export class ApiError extends Error {
   status: number

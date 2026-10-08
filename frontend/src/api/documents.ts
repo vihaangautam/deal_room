@@ -38,6 +38,6 @@ export function useRequestDeleteDocument(dealId: string) {
 }
 
 export function documentDownloadUrl(dealId: string, docId: string): string {
-  const base = import.meta.env.VITE_API_URL as string
+  const base = (import.meta.env.VITE_API_URL as string | undefined) ?? ""
   return `${base}/deals/${dealId}/documents/${docId}/download`
 }

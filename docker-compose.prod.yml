@@ -1,0 +1,135 @@
+# Production stack. Follows ARCHITECTURE.md §10 with four deliberate
+# differences, each noted where it occurs:
+#
+#   1. Images are built from source, not pulled from ghcr.io/lilkis/api —
+#      that image has never existed and nothing publishes it.
+#   2. There is a `web` service. §10 exposes the API and the tunnel and
+#      nothing serves frontend/dist, so the SPA had nowhere to live.
+#   3. No `worker`. procrastinate is unused — the only background work is
+#      the purge sweep, which is a periodic script run by a systemd timer
+#      (see README). A queue worker for one daily cron is a process to
+#      monitor for nothing.
+#   4. No SMTP variables. Email is a PRD §3 non-goal and a Phase 3 item;
+#      asking for credentials that nothing reads invites someone to
+#      believe notifications work.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  postgres:
+    image: postgres:16-bookworm
+    container_name: lilkis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lilkis_admin
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?set POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_DB: lilkis
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      # Creates the restricted lilkis_app role on first init. The Alembic
+      # migration grants to that role but cannot create it, so without
+      # this the first `alembic upgrade head` fails on "role does not
+      # exist" — and the password here must match POSTGRES_APP_PASSWORD.
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    command: >
+      postgres
+        -c shared_buffers=2GB
+        -c effective_cache_size=6GB
+        -c maintenance_work_mem=256MB
+        -c max_connections=50
+        -c work_mem=16MB
+        -c wal_level=replica
+        -c checkpoint_completion_target=0.9
+        -c random_page_cost=1.1
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lilkis_admin -d lilkis"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  api:
+    build:
+      context: ./backend
+    container_name: lilkis-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://lilkis_app:${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD}@postgres/lilkis
+      # Alembic runs as the owner, not the restricted role.
+      DATABASE_URL_ADMIN: postgresql+asyncpg://lilkis_admin:${POSTGRES_ADMIN_PASSWORD}@postgres/lilkis
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY}
+      OCI_ENDPOINT_URL: ${OCI_ENDPOINT_URL:?set OCI_ENDPOINT_URL}
+      OCI_BUCKET: ${OCI_BUCKET:?set OCI_BUCKET}
+      OCI_ACCESS_KEY_ID: ${OCI_ACCESS_KEY_ID:?set OCI_ACCESS_KEY_ID}
+      OCI_SECRET_ACCESS_KEY: ${OCI_SECRET_ACCESS_KEY:?set OCI_SECRET_ACCESS_KEY}
+      OCI_ADMIN_ACCESS_KEY_ID: ${OCI_ADMIN_ACCESS_KEY_ID:?set OCI_ADMIN_ACCESS_KEY_ID}
+      OCI_ADMIN_SECRET_ACCESS_KEY: ${OCI_ADMIN_SECRET_ACCESS_KEY:?set OCI_ADMIN_SECRET_ACCESS_KEY}
+      # Turns on Secure cookies and turns off the S3Mock Expect-header
+      # workaround in storage.py. Anything other than "production" leaves
+      # the session cookie usable over plain HTTP.
+      ENVIRONMENT: production
+      # CORS. Same-origin through nginx means this is never exercised, but
+      # a wrong value here is what breaks login if the API is ever split
+      # onto its own hostname.
+      FRONTEND_ORIGIN: ${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN}
+    volumes:
+      # Chunked uploads stage here between /chunk and /complete. On a
+      # named volume they survive a container restart mid-upload, so the
+      # browser's Retry resumes instead of starting the file again.
+      - upload_staging:/tmp/lilkis_uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - internal
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Same origin, under the /api prefix nginx strips before
+        # proxying. The prefix exists because the API's paths collide with
+        # the SPA's own routes — /deals is both a page and an endpoint.
+        # This is a build arg because Vite inlines it at build time:
+        # setting VITE_API_URL on the running container does nothing.
+        VITE_API_URL: "/api"
+    container_name: lilkis-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - internal
+      - external
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: lilkis-tunnel
+    restart: unless-stopped
+    # Point the tunnel's public hostname at http://web:8080 in the
+    # Cloudflare dashboard — not at the API. Everything reaches the API
+    # through nginx, which is what keeps it same-origin.
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - web
+    networks:
+      - external
+
+volumes:
+  pg_data:
+    driver: local
+  upload_staging:
+    driver: local
+
+networks:
+  # No ports are published on any service: the tunnel is the only way in,
+  # so the VM needs no inbound firewall rules at all.
+  internal:
+    driver: bridge
+  external:
+    driver: bridge
