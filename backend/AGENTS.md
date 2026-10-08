@@ -19,16 +19,22 @@ Python 3.12, FastAPI 0.115, SQLAlchemy 2.0 async, Alembic, fastapi-users, boto3,
 `docker-compose.yml` at the repo root only creates the Postgres superuser
 (`lilkis_admin`). ARCHITECTURE.md §2.1 defines a separate restricted
 `lilkis_app` role (no UPDATE/DELETE on `audit_log`, full CRUD elsewhere) that
-the app connects as. Create it once against the running container before
-`alembic upgrade head`:
+the app connects as.
 
-```sql
-CREATE ROLE lilkis_app WITH LOGIN PASSWORD 'localdevpassword';
+It is created automatically: `db-init/01-app-role.sql` is mounted into the
+Postgres container's `/docker-entrypoint-initdb.d`, which runs once when the
+data volume is first initialised. The GRANTs live in the Alembic migration,
+which can issue them but cannot create the role — a role is cluster-wide
+rather than part of a database's schema.
+
+So a full reset is just:
+
+```powershell
+docker compose down -v
+docker compose up -d
+cd backend; .\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m app.seed
 ```
-
-Then run the GRANT statements from ARCHITECTURE.md §2.1 (they're part of the
-same migration/DDL block — the Alembic migration should include them, not
-just the CREATE TABLE statements).
 
 ## Running
 ```

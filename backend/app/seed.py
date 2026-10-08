@@ -21,6 +21,7 @@ from app.database import async_session_factory
 from app.models.deal import Deal, DealStageHistory
 from app.models.folder import FolderTemplate, UserFolderPermission
 from app.models.user import User
+from app.seed_content import seed_content
 
 FOLDER_NAMES = [
     "Minutes of the meeting",
@@ -42,7 +43,10 @@ async def seed() -> None:
     async with async_session_factory() as db:
         existing = await db.scalar(select(User).where(User.email == "samir@lilkis.in"))
         if existing:
-            print("Already seeded — skipping.")
+            print("Base already seeded — skipping users, deals and folders.")
+            # Not a bare return: the content seed has its own guard, and a
+            # machine seeded before the content existed still needs it.
+            await seed_content(db)
             return
 
         samir = User(
@@ -176,6 +180,7 @@ async def seed() -> None:
         await db.commit()
         print("Seeded: samir@lilkis.in, rohan@lilkis.in, meera@lilkis.in (password: changeme123)")
         print("Seeded deals: PTXL (new), SHRM (running), MEHT (successful), OBRT (dropped)")
+        await seed_content(db)
 
 
 if __name__ == "__main__":

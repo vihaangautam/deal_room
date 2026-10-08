@@ -26,6 +26,10 @@ services:
       - "5433:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+      # Creates the restricted lilkis_app role on first init, so a reset
+      # with `down -v` leaves a database the migration can actually grant
+      # against. Runs only when the volume is empty.
+      - ./db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lilkis_admin -d lilkis"]
       interval: 5s
