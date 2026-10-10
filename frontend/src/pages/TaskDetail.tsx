@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { Lock, Paperclip } from "lucide-react"
 import {
   useAssignTask,
@@ -91,9 +91,11 @@ export function TaskDetail() {
       : user?.role === "admin" || user?.can_approve
         ? "Reassign"
         : "Request reassignment"
-  const hasPendingAttachments = task.attachments.some(
+  const pendingAttachmentCount = task.attachments.filter(
     (a) => a.status === "pending" || a.status === "uploading",
-  )
+  ).length
+  const hasPendingAttachments = pendingAttachmentCount > 0
+  const canApprove = user?.role === "admin" || user?.can_approve === true
   const submitLabel = hasPendingAttachments ? "Submit for approval" : "Mark as done"
 
   const linkableDocuments = (documents ?? []).filter(
@@ -208,7 +210,7 @@ export function TaskDetail() {
                 ))}
             </Menu>
           )}
-          {canActOnTask && task.status !== "done" && (
+          {canActOnTask && task.status !== "done" && task.status !== "submitted" && (
             <Button onClick={() => submitTask.mutate()} loading={submitTask.isPending}>
               {submitLabel}
             </Button>
@@ -248,6 +250,28 @@ export function TaskDetail() {
             </span>
           )}
         </div>
+
+        {/* DESIGN.md §5.7: "Moves to Done when Samir approves 2 pending
+            files." PRD G3 keeps approving in one queue — "the sponsor
+            approves every upload, deletion, task reassignment and task
+            deletion from one queue, in batches" — so this explains the
+            wait and points at the queue rather than repeating the control
+            here. An approver gets the link; everyone else gets the
+            sentence, because for them it is someone else's decision. */}
+        {pendingAttachmentCount > 0 && (
+          <p className="mb-3 text-meta text-text-tertiary">
+            Moves to Done when Samir approves {pendingAttachmentCount} pending{" "}
+            {pendingAttachmentCount === 1 ? "file" : "files"}.
+            {canApprove && (
+              <>
+                {" "}
+                <Link to="/admin/approvals" className="text-brand-700 hover:underline">
+                  Review now
+                </Link>
+              </>
+            )}
+          </p>
+        )}
 
         <h2 className="mb-2 text-label text-text-tertiary">Details</h2>
         <dl className="flex flex-col gap-2 text-table">
