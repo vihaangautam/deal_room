@@ -84,15 +84,36 @@ async def download_document(
     doc = await db.get(Document, doc_id)
     if doc is None or doc.deal_id != deal_id:
         raise HTTPException(status_code=404, detail="Document not found")
-    # PRD F10: admin can download from the Archive too — folder access
-    # doesn't apply there since Archive is already admin-only.
+
+    # Nothing is stored for these any more (PRD §8).
+    if doc.status in ("purged", "failed"):
+        raise HTTPException(status_code=404, detail="Document not found")
+
     if doc.status == "archived":
+        # PRD F10: admin downloads from the Archive, and folder access
+        # doesn't apply there since the Archive is already admin-only.
         if user.role != "admin":
             raise HTTPException(status_code=404, detail="Document not found")
-    elif doc.status not in ("active", "delete_requested"):
-        raise HTTPException(status_code=404, detail="Document not found")
     else:
+        if doc.status in ("pending", "rejected"):
+            # DESIGN.md §5.8 on the approvals queue: "without it Samir
+            # cannot inspect a file before deciding, which makes the whole
+            # screen a guess." Approving a document sight-unseen is the
+            # failure mode; this is the fix. Narrowed to the same people
+            # who can see the row at all (PRD F5): approvers, and the
+            # uploader for their own file.
+            if not (user.role == "admin" or user.can_approve or doc.uploaded_by == user.id):
+                raise HTTPException(status_code=404, detail="Document not found")
         await check_folder_access(db, user, doc.folder_id, "view")
+
+    if doc.integrity_check_failed:
+        # upload.py never wrote an object for these — the hash did not
+        # match, so there is nothing behind object_key. A presigned URL
+        # would be a link to a 404 at the storage provider.
+        raise HTTPException(
+            status_code=409,
+            detail="This file failed its integrity check and was never stored. It can only be rejected.",
+        )
 
     url = presigned_download_url(doc.object_key, doc.display_name)
     return RedirectResponse(url, status_code=302)

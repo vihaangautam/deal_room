@@ -36,7 +36,7 @@ from app.models.document import Document
 from app.models.folder import FolderTemplate
 from app.models.task import Task, TaskAttachment
 from app.models.user import User
-from app.storage import ensure_bucket, put_object
+from app.storage import ensure_bucket, object_exists, put_object
 
 NOW = datetime.now(timezone.utc)
 TODAY = date.today()
@@ -99,9 +99,38 @@ async def _lookup(db: AsyncSession) -> tuple[dict[str, User], dict[str, Deal], d
     return users, deals, folders
 
 
+async def repair_storage(db: AsyncSession) -> int:
+    """Re-write the placeholder for any document row whose object is gone.
+
+    This is not a one-off: docker-compose.yml says S3Mock "stores to an
+    in-container temp dir and does not persist across restarts", while
+    Postgres keeps its rows on a named volume. So every time the machine
+    or the containers restart, every seeded document still lists but no
+    longer downloads — which is only discovered by clicking one, usually
+    in front of an audience. Running the seed again fixes it.
+    """
+    ensure_bucket()
+    rows = await db.scalars(
+        select(Document).where(
+            Document.status.notin_(("purged", "failed")),
+            Document.integrity_check_failed.is_(False),
+        )
+    )
+    repaired = 0
+    for doc in rows:
+        if object_exists(doc.object_key):
+            continue
+        put_object(doc.object_key, _dummy_pdf(doc.display_name), doc.mime_type)
+        repaired += 1
+    return repaired
+
+
 async def seed_content(db: AsyncSession) -> None:
     if await db.scalar(select(Document).limit(1)):
         print("Content already seeded — skipping documents, tasks and comments.")
+        repaired = await repair_storage(db)
+        if repaired:
+            print(f"Restored {repaired} document(s) whose stored file had gone.")
         return
 
     users, deals, folders = await _lookup(db)

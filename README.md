@@ -64,6 +64,23 @@ and tasks.
 
 ---
 
+## After any restart, re-run the seed
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m app.seed
+```
+
+S3Mock keeps uploaded files in a container temp directory and loses them
+when it restarts, while Postgres keeps its rows on a named volume. So
+after a reboot every document still *lists* but none of them *download* —
+which you only find out by clicking one.
+
+The seed is safe to re-run and repairs exactly this: it leaves the rows
+alone and rewrites the missing files. **Do it before any demo.**
+
+---
+
 ## Sign in
 
 Password for all three is `changeme123`.

@@ -187,6 +187,7 @@ async def list_approvals(
             deal_name=deal_name,
             item_label=doc_name,
             item_sublabel=folder_name,
+            document_id=approval.document_id,
             requested_by_name=requester_name,
             requested_at=approval.created_at,
             note=approval.requester_note,

@@ -3,7 +3,9 @@
 Roughly 12 minutes. Every screen below already has data in it; nothing has
 to be created live except where it says so.
 
-**Before you start:** all three accounts use `changeme123`. Have
+**Before you start:** run `python -m app.seed` once (it repairs files lost
+when the containers restarted — downloads fail silently otherwise). All
+three accounts use `changeme123`. Have
 http://localhost:5173 open and be signed out. Close other tabs — the audit
 log records every sign-in and you will be showing it at the end.
 
@@ -102,6 +104,9 @@ Go to **Approvals** in the sidebar.
 
 > "Three things waiting: an upload, a deletion, and a reassignment request.
 > Samir is the only one who can decide."
+
+- **Click the filename first.** It downloads. "I'm not approving something
+  I can't read — I open it, then I decide."
 
 - Tick **Hypothecation deed signed.pdf** → **Approve selected**.
 - Toast confirms it.

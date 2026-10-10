@@ -66,6 +66,18 @@ def put_object(key: str, body: bytes | IO[bytes], content_type: str) -> None:
     app_client.put_object(Bucket=settings.oci_bucket, Key=key, Body=body, ContentType=content_type)
 
 
+def object_exists(key: str) -> bool:
+    """Used by the demo seed to spot rows whose object has gone. S3Mock
+    keeps objects in a container temp dir and loses them on restart, while
+    Postgres keeps its rows on a named volume — so a laptop reboot leaves
+    every seeded document pointing at nothing."""
+    try:
+        app_client.head_object(Bucket=settings.oci_bucket, Key=key)
+        return True
+    except ClientError:
+        return False
+
+
 def delete_object(key: str) -> None:
     """Admin key only — PRD F10 purge. The app key has no delete
     permission against real OCI (ARCHITECTURE.md §9); S3Mock doesn't

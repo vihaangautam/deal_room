@@ -143,6 +143,8 @@ export interface ApprovalItem {
   deal_name: string
   item_label: string
   item_sublabel: string | null
+  /** Set for upload/deletion rows, so the filename can link to its download. */
+  document_id: string | null
   requested_by_name: string
   requested_at: string
   note: string | null

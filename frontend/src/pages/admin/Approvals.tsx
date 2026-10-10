@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react"
 import { useApprovals, useBulkApprovalAction } from "@/api/approvals"
+import { documentDownloadUrl } from "@/api/documents"
 import { Avatar } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { PageBody } from "@/components/PageBody"
 import { UseALaptop } from "@/components/UseALaptop"
 import { UserName } from "@/components/UserName"
@@ -191,6 +193,7 @@ export function Approvals() {
               <th className="px-4 font-medium">Requested by</th>
               <th className="px-4 font-medium">Requested on</th>
               <th className="px-4 font-medium">Note</th>
+              <th className="w-10 px-2" />
             </tr>
           </thead>
           <tbody>
@@ -240,7 +243,20 @@ function Row({ row, checked, onToggle }: { row: ApprovalItem; checked: boolean; 
       </td>
       <td className="px-4 text-table text-text-primary">{TYPE_LABEL[row.type]}</td>
       <td className="px-4">
-        <p className="text-table font-medium text-text-primary">{row.item_label}</p>
+        {/* DESIGN.md §5.8: "Item for a document: filename in 13/500 as a
+            download link". Approving a file you cannot open is a guess,
+            which is what that section says in as many words. Task rows
+            have nothing to download, so they stay plain text. */}
+        {row.document_id ? (
+          <a
+            href={documentDownloadUrl(row.deal_id, row.document_id)}
+            className="text-table font-medium text-text-primary hover:underline"
+          >
+            {row.item_label}
+          </a>
+        ) : (
+          <p className="text-table font-medium text-text-primary">{row.item_label}</p>
+        )}
         {row.item_sublabel && <p className="text-meta text-text-tertiary">{row.item_sublabel}</p>}
       </td>
       <td className="px-4 text-table text-text-secondary">{row.deal_name}</td>
@@ -253,6 +269,17 @@ function Row({ row, checked, onToggle }: { row: ApprovalItem; checked: boolean; 
       <td className="px-4 text-meta text-text-tertiary">{formatDateTime(row.requested_at)}</td>
       <td className="max-w-48 truncate px-4 text-meta text-text-tertiary" title={row.note ?? undefined}>
         {row.note ?? "—"}
+      </td>
+      <td className="w-10 px-2">
+        {row.document_id && (
+          <RowMenu>
+            <RowMenuItem
+              onSelect={() => window.open(documentDownloadUrl(row.deal_id, row.document_id!), "_self")}
+            >
+              Download
+            </RowMenuItem>
+          </RowMenu>
+        )}
       </td>
     </tr>
   )

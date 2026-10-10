@@ -189,3 +189,60 @@ async def test_queue_lists_task_approvals_with_deal_filter(
 
     filtered = (await client.get(f"/approvals?deal_id={deal.id}")).json()
     assert [item["type"] for item in filtered] == ["task_reassign"]
+
+
+async def test_an_approver_can_open_the_file_they_are_being_asked_to_approve(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    """DESIGN §5.8: "without it Samir cannot inspect a file before
+    deciding, which makes the whole screen a guess." Download used to 404
+    on anything pending, for everyone — so the approvals queue asked for a
+    decision on a file nobody could open."""
+    admin = await create_user(db, "admin@lilkis.in", role="admin")
+    member = await create_user(db, "member@lilkis.in")
+    outsider = await create_user(db, "outsider@lilkis.in")
+    deal = await create_deal(db, "PEND", admin.id)
+    folder = await create_folder(db, "Legal", admin.id)
+    await grant_access(db, member.id, folder.id, "contribute", admin.id)
+    await grant_access(db, outsider.id, folder.id, "view", admin.id)
+
+    await login(client, "member@lilkis.in")
+    await _create_pending_upload(client, str(deal.id), str(folder.id), b"a deed awaiting review")
+
+    doc_id = (await client.get(f"/deals/{deal.id}/documents")).json()[0]["id"]
+    url = f"/deals/{deal.id}/documents/{doc_id}/download"
+
+    # the uploader can re-open their own pending file
+    assert (await client.get(url, follow_redirects=False)).status_code == 302
+
+    # and so can the approver who has to decide on it
+    await login(client, "admin@lilkis.in")
+    assert (await client.get(url, follow_redirects=False)).status_code == 302
+
+    # but a member who merely has folder access still cannot: PRD F5 says
+    # other members do not see someone else's pending upload at all
+    await login(client, "outsider@lilkis.in")
+    assert (await client.get(url, follow_redirects=False)).status_code == 404
+
+
+async def test_the_queue_carries_the_document_id_to_link_to(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    admin = await create_user(db, "admin@lilkis.in", role="admin")
+    member = await create_user(db, "member@lilkis.in")
+    deal = await create_deal(db, "LINK", admin.id)
+    folder = await create_folder(db, "Legal", admin.id)
+    await grant_access(db, member.id, folder.id, "contribute", admin.id)
+
+    await login(client, "member@lilkis.in")
+    await _create_pending_upload(client, str(deal.id), str(folder.id), b"link me")
+
+    await login(client, "admin@lilkis.in")
+    row = (await client.get("/approvals")).json()[0]
+    assert row["document_id"] is not None
+
+    # and that id is the one the download endpoint answers on
+    resp = await client.get(
+        f"/deals/{deal.id}/documents/{row['document_id']}/download", follow_redirects=False
+    )
+    assert resp.status_code == 302

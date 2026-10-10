@@ -12,6 +12,10 @@ class ApprovalItem(BaseModel):
     deal_name: str
     item_label: str
     item_sublabel: str | None
+    # Set for document_upload and document_delete, so the queue can link
+    # the filename to its download (DESIGN.md §5.8). None for the task
+    # types, which have nothing to download.
+    document_id: uuid.UUID | None = None
     requested_by_name: str
     requested_at: datetime
     note: str | None
