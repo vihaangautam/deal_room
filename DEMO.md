@@ -1,11 +1,11 @@
-# Demo script — 10 October 2026
+# Demo script
 
 Roughly 12 minutes. Every screen below already has data in it; nothing has
 to be created live except where it says so.
 
-**Before you start:** run `python -m app.seed` once (it repairs files lost
-when the containers restarted — downloads fail silently otherwise). All
-three accounts use `changeme123`. Have
+**Before you start:** run `.\start.ps1` — it brings everything up and
+checks you can sign in, including repairing files lost when the
+containers restarted. All three accounts use `changeme123`. Have
 http://localhost:5173 open and be signed out. Close other tabs — the audit
 log records every sign-in and you will be showing it at the end.
 

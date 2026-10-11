@@ -27,3 +27,6 @@ minio_data/
 # editors
 .vscode/
 .idea/
+
+# start.ps1 writes server output here
+logs/

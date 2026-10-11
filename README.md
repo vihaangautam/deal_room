@@ -8,76 +8,47 @@ Everything runs from the repo root: `C:\Users\ASUS\OneDrive\Desktop\Lilkis Deal 
 
 ---
 
-## Start it (every time)
+## Start it
 
-Three terminals. Start them in this order.
+```powershell
+.\start.ps1
+```
 
-**1 — Postgres and storage**
+That is the whole thing. It starts Docker if it is down, waits for
+Postgres and storage, applies any pending migration, repairs the seeded
+files, starts the API and the frontend, and then signs in to prove the app
+actually works before telling you it is ready. Takes about a minute cold,
+seconds warm, and is safe to run twice.
+
+```powershell
+.\start.ps1 -Reset   # destroy the data and rebuild from the seed
+.\start.ps1 -Stop    # stop the servers and the containers
+```
+
+Logs land in `logs\`. If a step fails the script prints the last lines of
+the relevant one rather than leaving you to find it.
+
+### Doing it by hand
+
+Only needed if the script fails and you want to see where.
 
 ```powershell
 docker compose up -d
-```
-
-Wait for both to report healthy (about 10 seconds):
-
-```powershell
-docker ps --format "{{.Names}}: {{.Status}}"
-```
-
-**2 — API** (leave it running)
-
-```powershell
 cd backend
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m app.seed
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --port 8002
 ```
 
-Confirm in another window — it must say `"db":"ok"`:
-
-```powershell
-curl http://localhost:8002/health
-```
-
-**3 — Frontend** (leave it running)
+and in a second terminal:
 
 ```powershell
 cd frontend
 npm run dev
 ```
 
-Open **http://localhost:5173**.
-
----
-
-## First run on a fresh machine
-
-Do this once, after step 1 above and before step 2.
-
-```powershell
-cd backend
-.\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe -m app.seed
-```
-
-`app.seed` is safe to re-run: it skips anything already present, so running
-it on a database that only has the base cast will still add the documents
-and tasks.
-
----
-
-## After any restart, re-run the seed
-
-```powershell
-cd backend
-.\.venv\Scripts\python.exe -m app.seed
-```
-
-S3Mock keeps uploaded files in a container temp directory and loses them
-when it restarts, while Postgres keeps its rows on a named volume. So
-after a reboot every document still *lists* but none of them *download* —
-which you only find out by clicking one.
-
-The seed is safe to re-run and repairs exactly this: it leaves the rows
-alone and rewrites the missing files. **Do it before any demo.**
+Three things differ from the generic commands in CLAUDE.md §14, each for a
+reason given under [Why these commands differ](#why-these-commands-differ).
 
 ---
 
