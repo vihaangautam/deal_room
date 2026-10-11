@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiFetch } from "./client"
+import type { AuditFilters } from "./admin"
 import { DEAL_STAGE_LABEL } from "@/components/StatusPill"
 import { toast } from "@/components/ui/toast"
 import type {
@@ -49,10 +50,25 @@ export function useCreateDeal() {
 
 // Admin-only on the server (PRD §7), so callers pass undefined for a
 // member and the query simply doesn't run.
-export function useDealActivity(dealId: string | undefined) {
+//
+// The filters are the admin Activity set minus the deal, which this
+// endpoint already is. Narrowing happens in Postgres, not in the browser:
+// a closed deal's history is the case this exists for, and shipping all
+// of it to filter client-side would defeat the point.
+export function useDealActivity(dealId: string | undefined, filters?: AuditFilters) {
+  const query = new URLSearchParams()
+  if (filters?.actorId) query.set("actor_id", filters.actorId)
+  if (filters?.action) query.set("action", filters.action)
+  if (filters?.since) query.set("since", filters.since)
+  if (filters?.until) query.set("until", filters.until)
+  if (filters?.limit) query.set("limit", String(filters.limit))
+  const qs = query.toString()
+
   return useQuery({
-    queryKey: ["deals", dealId, "activity"],
-    queryFn: () => apiFetch<AuditLogItem[]>(`/deals/${dealId}/activity`),
+    // The filter set is part of the key, or changing a filter hands back
+    // the previous filter's rows from cache.
+    queryKey: ["deals", dealId, "activity", qs],
+    queryFn: () => apiFetch<AuditLogItem[]>(`/deals/${dealId}/activity${qs ? `?${qs}` : ""}`),
     enabled: !!dealId,
   })
 }

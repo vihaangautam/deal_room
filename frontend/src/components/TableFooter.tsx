@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 export function TableFooter({
   count,
   noun,
+  plural,
   page,
   pageCount,
   onPageChange,
@@ -18,6 +19,8 @@ export function TableFooter({
   count: number
   /** Singular noun: "deal" renders "3 deals", "1 deal". */
   noun: string
+  /** Only when adding -s is wrong: "entry" would render "16 entrys". */
+  plural?: string
   page?: number
   pageCount?: number
   onPageChange?: (page: number) => void
@@ -27,7 +30,7 @@ export function TableFooter({
   return (
     <div className="flex h-10 items-center justify-between border-t border-border px-4">
       <span className="text-meta text-text-tertiary">
-        {count} {count === 1 ? noun : `${noun}s`}
+        {count} {count === 1 ? noun : (plural ?? `${noun}s`)}
       </span>
       {paginated && pageCount > 1 && (
         <div className="flex items-center gap-1">

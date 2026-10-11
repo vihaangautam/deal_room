@@ -1,8 +1,7 @@
 import { useState } from "react"
-import { useAuditActions, useAuditLog, type AuditFilters } from "@/api/admin"
-import { useDeals } from "@/api/deals"
-import { useUsers } from "@/api/users"
+import { useAuditLog, type AuditFilters } from "@/api/admin"
 import { ActivityFeed } from "@/components/ActivityFeed"
+import { ActivityFilters } from "@/components/ActivityFilters"
 import { PageBody } from "@/components/PageBody"
 import { TabBand } from "@/components/TabBand"
 import { TableFooter } from "@/components/TableFooter"
@@ -13,16 +12,11 @@ import { PageHeader } from "@/components/PageHeader"
 // them, which is most of what PRD F10 asks this screen for.
 const PAGE_SIZE = 50 // DESIGN.md §6.11
 
-const SELECT_CLASS =
-  "h-8 rounded-md border border-border bg-surface px-2 text-table text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-600"
 
 export function Activity() {
   const [filters, setFilters] = useState<AuditFilters>({})
   const [page, setPage] = useState(1)
   const { data: logs, isLoading } = useAuditLog({ ...filters, limit: 200 })
-  const { data: deals } = useDeals()
-  const { data: users } = useUsers()
-  const { data: actions } = useAuditActions()
 
   function set(patch: Partial<AuditFilters>) {
     setFilters((prev) => {
@@ -46,78 +40,15 @@ export function Activity() {
       <PageHeader title="Activity" />
       <TabBand
         tabs={
-          <div className="flex flex-wrap items-center gap-2">
-        <select
-          aria-label="Filter by deal"
-          className={SELECT_CLASS}
-          value={filters.dealId ?? ""}
-          onChange={(e) => set({ dealId: e.target.value })}
-        >
-          <option value="">All deals</option>
-          {deals?.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          aria-label="Filter by person"
-          className={SELECT_CLASS}
-          value={filters.actorId ?? ""}
-          onChange={(e) => set({ actorId: e.target.value })}
-        >
-          <option value="">Anyone</option>
-          {users?.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.display_name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          aria-label="Filter by action"
-          className={SELECT_CLASS}
-          value={filters.action ?? ""}
-          onChange={(e) => set({ action: e.target.value })}
-        >
-          <option value="">Any action</option>
-          {actions?.map((a) => (
-            <option key={a} value={a}>
-              {a.replace(/[._]/g, " ")}
-            </option>
-          ))}
-        </select>
-
-        <label className="flex items-center gap-1.5 text-meta text-text-tertiary">
-          From
-          <input
-            type="date"
-            className={SELECT_CLASS}
-            value={filters.since?.slice(0, 10) ?? ""}
-            onChange={(e) => set({ since: e.target.value ? `${e.target.value}T00:00:00` : "" })}
+          <ActivityFilters
+            filters={filters}
+            onChange={set}
+            onClear={() => {
+              setFilters({})
+              setPage(1)
+            }}
+            showDeal
           />
-        </label>
-        <label className="flex items-center gap-1.5 text-meta text-text-tertiary">
-          To
-          <input
-            type="date"
-            className={SELECT_CLASS}
-            value={filters.until?.slice(0, 10) ?? ""}
-            onChange={(e) => set({ until: e.target.value ? `${e.target.value}T23:59:59` : "" })}
-          />
-        </label>
-
-        {hasFilters && (
-          <button
-            type="button"
-            onClick={() => setFilters({})}
-            className="text-meta text-brand-700 hover:underline"
-          >
-            Clear filters
-          </button>
-        )}
-          </div>
         }
       />
       <PageBody>
@@ -140,6 +71,7 @@ export function Activity() {
         <TableFooter
           count={rows.length}
           noun="entry"
+            plural="entries"
           page={page}
           pageCount={pageCount}
           onPageChange={setPage}

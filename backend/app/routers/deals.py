@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import case, func, or_, select
@@ -194,18 +195,36 @@ async def get_stage_history(
 @router.get("/{deal_id}/activity", response_model=list[AuditLogItem])
 async def get_deal_activity(
     deal_id: uuid.UUID,
-    limit: int = 50,
+    actor_id: uuid.UUID | None = None,
+    action: str | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    limit: int = 200,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> list[AuditLogItem]:
-    """The History half of DESIGN.md §6.3's Activity tab.
+    """A deal's own history.
 
     Admin-only, because PRD §7's permission matrix gives "View Archive /
-    Activity" to admin alone. The Comments half of the same tab is open to
-    everyone — the matrix grants "Create task, comment" to every role — so
-    the tab itself is not gated, only this.
+    Activity" to admin alone. Comments live on their own tab and are open
+    to everyone.
+
+    The filters are the admin Activity page's set minus the deal, which is
+    implied here. audit_query has accepted all of them since it was
+    written; this endpoint simply never passed them on, so a deal's
+    history could only ever be read by scrolling — fine at sixteen rows,
+    useless at the several hundred a closed deal accumulates.
     """
-    rows = await db.execute(audit_query(deal_id=deal_id, limit=limit))
+    rows = await db.execute(
+        audit_query(
+            deal_id=deal_id,
+            actor_id=actor_id,
+            action=action,
+            since=since,
+            until=until,
+            limit=limit,
+        )
+    )
     return [to_audit_item(*row) for row in rows]
 
 
