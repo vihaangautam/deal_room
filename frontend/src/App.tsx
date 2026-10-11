@@ -8,6 +8,7 @@ import { ChangePassword } from "@/pages/ChangePassword"
 import { DealsHome } from "@/pages/DealsHome"
 import { DealDocuments } from "@/pages/DealDocuments"
 import { DealActivity } from "@/pages/DealActivity"
+import { DealComments } from "@/pages/DealComments"
 import { DealTasks } from "@/pages/DealTasks"
 import { TaskDetail } from "@/pages/TaskDetail"
 import { MyTasks } from "@/pages/MyTasks"
@@ -38,6 +39,7 @@ function ProtectedRoutes() {
         <Route path="/deals" element={<DealsHome />} />
         <Route path="/deals/:dealId/documents/:folderId?" element={<DealDocuments />} />
         <Route path="/deals/:dealId/tasks" element={<DealTasks />} />
+        <Route path="/deals/:dealId/comments" element={<DealComments />} />
         <Route path="/deals/:dealId/activity" element={<DealActivity />} />
         <Route path="/deals/:dealId/tasks/:taskId" element={<TaskDetail />} />
         <Route path="/my-tasks" element={<MyTasks />} />

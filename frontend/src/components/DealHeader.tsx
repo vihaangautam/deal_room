@@ -28,9 +28,6 @@ export function DealHeader({ deal, actions }: { deal: DealDetail; actions?: Reac
   // Every document the viewer can see in this deal — the same rows the
   // folder list counts, so the tab and the folder list cannot disagree.
   const documentCount = (documents ?? []).length
-  // What the viewer can actually open: everyone sees the comments, only
-  // admin sees the history (PRD §7).
-  const activityCount = (comments?.length ?? 0) + (activity?.length ?? 0)
 
   const tabs = [
     { to: `/deals/${deal.id}/documents`, label: "Documents", count: documentCount, show: true },
@@ -41,7 +38,16 @@ export function DealHeader({ deal, actions }: { deal: DealDetail; actions?: Reac
       // PRD F8: no tasks on New or Old deals, so no tab either.
       show: deal.stage === "running",
     },
-    { to: `/deals/${deal.id}/activity`, label: "Activity", count: activityCount, show: true },
+    // Two counts rather than one sum. "Activity 3" used to mean nought
+    // comments plus three history rows, which is a number about nothing.
+    { to: `/deals/${deal.id}/comments`, label: "Comments", count: comments?.length ?? 0, show: true },
+    {
+      to: `/deals/${deal.id}/activity`,
+      label: "Activity",
+      count: activity?.length ?? 0,
+      // PRD §7: "View Archive / Activity" is admin-only.
+      show: isAdmin,
+    },
   ].filter((t) => t.show)
 
   return (
