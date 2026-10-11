@@ -41,3 +41,18 @@ export function documentDownloadUrl(dealId: string, docId: string): string {
   const base = (import.meta.env.VITE_API_URL as string | undefined) ?? ""
   return `${base}/deals/${dealId}/documents/${docId}/download`
 }
+
+/**
+ * Opens in the browser's own viewer instead of saving to disk. The server
+ * honours it for PDFs only — a .docx asked for inline downloads anyway.
+ * Not a preview feature: there is no viewer in this app, it just stops
+ * forcing a download of something Chrome already renders.
+ */
+export function documentViewUrl(dealId: string, docId: string): string {
+  return `${documentDownloadUrl(dealId, docId)}?inline=true`
+}
+
+/** PDFs open in a tab; everything else can only be downloaded. */
+export function canOpenInBrowser(mimeType: string | null | undefined): boolean {
+  return mimeType === "application/pdf"
+}

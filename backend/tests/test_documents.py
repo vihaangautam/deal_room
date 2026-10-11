@@ -184,3 +184,71 @@ async def test_view_only_user_cannot_upload(client: AsyncClient, db: AsyncSessio
         },
     )
     assert init.status_code == 403
+
+
+async def _seed_document(db, deal, folder, uploader, name, mime):
+    """A document row plus its stored object, without going through the
+    chunked upload — these tests only care about the download headers."""
+    from app.models.document import Document
+    from app.seed_content import _dummy_pdf
+    from app.storage import put_object
+    import hashlib, uuid as _uuid
+
+    doc_id = _uuid.uuid4()
+    doc = Document(
+        id=doc_id,
+        deal_id=deal.id,
+        folder_id=folder.id,
+        display_name=name,
+        original_name=name,
+        mime_type=mime,
+        size_bytes=10,
+        sha256=hashlib.sha256(name.encode()).hexdigest(),
+        object_key=f"deals/{deal.id}/{doc_id}",
+        status="active",
+        uploaded_by=uploader.id,
+    )
+    db.add(doc)
+    await db.commit()
+    put_object(doc.object_key, _dummy_pdf(name), mime)
+    return doc
+
+
+async def test_pdfs_can_open_in_the_browser_but_other_types_cannot(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    """Clicking a filename should open a PDF in a tab rather than land it
+    in Downloads. That is the Content-Disposition, not a viewer: PRD §3
+    rules out in-browser preview, which the roadmap scopes as "PDF.js
+    range requests" — an app-built viewer. This is the absence of one.
+
+    A .docx asked for inline must still download, because a browser
+    renders it as binary noise.
+    """
+    admin = await create_user(db, "admin@lilkis.in", role="admin")
+    deal = await create_deal(db, "VIEW", admin.id)
+    folder = await create_folder(db, "Legal", admin.id)
+    await login(client, "admin@lilkis.in")
+
+    pdf = await _seed_document(db, deal, folder, admin, "deed.pdf", "application/pdf")
+    docx = await _seed_document(
+        db,
+        deal,
+        folder,
+        admin,
+        "annexure.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
+    base = f"/deals/{deal.id}/documents"
+
+    # default stays a download, so the Download menu item still saves
+    resp = await client.get(f"{base}/{pdf.id}/download", follow_redirects=False)
+    assert "response-content-disposition=attachment" in resp.headers["location"].lower()
+
+    resp = await client.get(f"{base}/{pdf.id}/download?inline=true", follow_redirects=False)
+    assert "response-content-disposition=inline" in resp.headers["location"].lower()
+
+    # a .docx cannot be displayed, so inline is ignored for it
+    resp = await client.get(f"{base}/{docx.id}/download?inline=true", follow_redirects=False)
+    assert "response-content-disposition=attachment" in resp.headers["location"].lower()

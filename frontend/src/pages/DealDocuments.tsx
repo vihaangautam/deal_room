@@ -2,7 +2,14 @@ import { useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { FileSpreadsheet, FileText, Lock, Upload } from "lucide-react"
 import { useDeal } from "@/api/deals"
-import { useDocuments, useRenameDocument, useRequestDeleteDocument, documentDownloadUrl } from "@/api/documents"
+import {
+  canOpenInBrowser,
+  documentDownloadUrl,
+  documentViewUrl,
+  useDocuments,
+  useRenameDocument,
+  useRequestDeleteDocument,
+} from "@/api/documents"
 import { useFolders } from "@/api/folders"
 import { useMyPermissions } from "@/api/permissions"
 import { useAuthStore } from "@/stores/auth"
@@ -131,10 +138,17 @@ function FileRow({
             />
           ) : isLinkable ? (
             <a
-              href={documentDownloadUrl(dealId, doc.id)}
-              className={cn(
-                "text-table font-medium text-text-primary hover:underline",
-              )}
+              // A PDF opens in a new tab rather than landing in Downloads;
+              // formats the browser cannot render still download.
+              href={
+                canOpenInBrowser(doc.mime_type)
+                  ? documentViewUrl(dealId, doc.id)
+                  : documentDownloadUrl(dealId, doc.id)
+              }
+              {...(canOpenInBrowser(doc.mime_type)
+                ? { target: "_blank", rel: "noreferrer" }
+                : {})}
+              className="text-table font-medium text-text-primary hover:underline"
             >
               {doc.display_name}
             </a>
@@ -171,6 +185,11 @@ function FileRow({
       <td className="w-10 px-2">
         {doc.status === "active" && canContribute && (
           <RowMenu>
+            <RowMenuItem
+              onSelect={() => window.open(documentDownloadUrl(dealId, doc.id), "_self")}
+            >
+              Download
+            </RowMenuItem>
             <RowMenuItem onSelect={() => setRenaming(true)}>Rename</RowMenuItem>
             <RowMenuItem danger onSelect={() => setDeleteOpen(true)}>
               Request deletion

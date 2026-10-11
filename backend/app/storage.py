@@ -86,14 +86,32 @@ def delete_object(key: str) -> None:
     admin_client.delete_object(Bucket=settings.oci_bucket, Key=key)
 
 
-def presigned_download_url(key: str, filename: str, expires_in: int = 600) -> str:
-    """ARCHITECTURE.md §5 / CLAUDE.md §10: never exceed 10 minutes."""
+# Formats a browser renders itself. Everything else — .docx, .xlsx, .csv —
+# would either download anyway or render as gibberish, so it keeps the
+# attachment disposition.
+INLINE_VIEWABLE_TYPES = {"application/pdf"}
+
+
+def presigned_download_url(
+    key: str, filename: str, expires_in: int = 600, *, inline: bool = False
+) -> str:
+    """ARCHITECTURE.md §5 / CLAUDE.md §10: never exceed 10 minutes.
+
+    inline=True asks the browser to display the file rather than save it,
+    which is what lets a PDF open in a tab. This is not the in-browser
+    preview PRD §3 rules out — that is a viewer built in the app, which
+    the roadmap scopes as "PDF.js range requests" for Phase 3. This is the
+    opposite: no viewer at all, just not forcing a download of something
+    the browser already knows how to display. The file still comes from
+    the same 10-minute presigned URL and is never proxied through us.
+    """
+    disposition = "inline" if inline else "attachment"
     return app_client.generate_presigned_url(
         "get_object",
         Params={
             "Bucket": settings.oci_bucket,
             "Key": key,
-            "ResponseContentDisposition": f'attachment; filename="{filename}"',
+            "ResponseContentDisposition": f'{disposition}; filename="{filename}"',
         },
         ExpiresIn=expires_in,
     )

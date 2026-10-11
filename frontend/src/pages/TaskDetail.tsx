@@ -14,7 +14,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { CommentThread } from "@/components/CommentThread"
 import { UserName } from "@/components/UserName"
 import { useDeal } from "@/api/deals"
-import { useDocuments } from "@/api/documents"
+import { documentDownloadUrl, documentViewUrl, useDocuments } from "@/api/documents"
 import { useFolders } from "@/api/folders"
 import { useMyPermissions } from "@/api/permissions"
 import { useUsers } from "@/api/users"
@@ -27,7 +27,13 @@ import { Menu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { formatDate, formatDateTime } from "@/lib/utils"
 import type { TaskAttachmentItem } from "@/api/types"
 
-function AttachmentRow({ attachment }: { attachment: TaskAttachmentItem }) {
+function AttachmentRow({
+  attachment,
+  dealId,
+}: {
+  attachment: TaskAttachmentItem
+  dealId: string
+}) {
   if (attachment.restricted) {
     return (
       <div className="flex h-9 items-center gap-2 border-b border-border px-1 last:border-b-0">
@@ -39,7 +45,18 @@ function AttachmentRow({ attachment }: { attachment: TaskAttachmentItem }) {
   return (
     <div className="flex h-9 items-center gap-2 border-b border-border px-1 last:border-b-0">
       <Paperclip className="h-4 w-4 text-text-tertiary" aria-hidden />
-      <span className="text-table text-text-primary">{attachment.display_name}</span>
+      <a
+        href={
+          attachment.display_name?.toLowerCase().endsWith(".pdf")
+            ? documentViewUrl(dealId, attachment.document_id)
+            : documentDownloadUrl(dealId, attachment.document_id)
+        }
+        target="_blank"
+        rel="noreferrer"
+        className="text-table text-text-primary hover:underline"
+      >
+        {attachment.display_name}
+      </a>
       <span className="text-meta text-text-tertiary">{attachment.folder_name}</span>
       {attachment.status && <DocumentStatusPill status={attachment.status} />}
     </div>
@@ -187,7 +204,7 @@ export function TaskDetail() {
           ) : (
             <div className="rounded-md border border-border">
               {task.attachments.map((a) => (
-                <AttachmentRow key={a.document_id} attachment={a} />
+                <AttachmentRow key={a.document_id} attachment={a} dealId={dealId} />
               ))}
             </div>
           )}

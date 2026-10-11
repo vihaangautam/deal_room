@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useApprovals, useBulkApprovalAction } from "@/api/approvals"
-import { documentDownloadUrl } from "@/api/documents"
+import { documentDownloadUrl, documentViewUrl } from "@/api/documents"
 import { Avatar } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
@@ -249,7 +249,16 @@ function Row({ row, checked, onToggle }: { row: ApprovalItem; checked: boolean; 
             have nothing to download, so they stay plain text. */}
         {row.document_id ? (
           <a
-            href={documentDownloadUrl(row.deal_id, row.document_id)}
+            // Opens in a tab so Samir can read it and come straight back
+            // to the queue, rather than approving from a filename and a
+            // folder. Non-PDFs fall back to downloading.
+            href={
+              row.item_label.toLowerCase().endsWith(".pdf")
+                ? documentViewUrl(row.deal_id, row.document_id)
+                : documentDownloadUrl(row.deal_id, row.document_id)
+            }
+            target="_blank"
+            rel="noreferrer"
             className="text-table font-medium text-text-primary hover:underline"
           >
             {row.item_label}

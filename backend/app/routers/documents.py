@@ -18,7 +18,7 @@ from app.models.audit import AuditLog
 from app.models.document import Document
 from app.models.user import User
 from app.schemas.document import DeleteRequestBody, DocumentRead, RenameRequest
-from app.storage import presigned_download_url
+from app.storage import INLINE_VIEWABLE_TYPES, presigned_download_url
 
 router = APIRouter(prefix="/deals/{deal_id}/documents", tags=["documents"])
 
@@ -78,9 +78,14 @@ async def list_documents(
 async def download_document(
     deal_id: uuid.UUID,
     doc_id: uuid.UUID,
+    inline: bool = False,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_password_set),
 ) -> RedirectResponse:
+    """inline=true opens the file in the browser instead of saving it.
+    Honoured only for types a browser can display (PDF today); a .docx
+    asked for inline still downloads, because the alternative is a tab
+    full of binary."""
     doc = await db.get(Document, doc_id)
     if doc is None or doc.deal_id != deal_id:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -115,7 +120,11 @@ async def download_document(
             detail="This file failed its integrity check and was never stored. It can only be rejected.",
         )
 
-    url = presigned_download_url(doc.object_key, doc.display_name)
+    url = presigned_download_url(
+        doc.object_key,
+        doc.display_name,
+        inline=inline and doc.mime_type in INLINE_VIEWABLE_TYPES,
+    )
     return RedirectResponse(url, status_code=302)
 
 

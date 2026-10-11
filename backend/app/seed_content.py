@@ -43,9 +43,49 @@ TODAY = date.today()
 
 
 def _dummy_pdf(label: str) -> bytes:
-    """Small enough to seed instantly, shaped enough that a browser offers
-    it as a PDF download rather than refusing to save it."""
-    return f"%PDF-1.4\n% Lilkis Deal Room demo placeholder\n% {label}\n%%EOF\n".encode()
+    """A real one-page PDF, not a file that merely starts with %PDF.
+
+    The placeholder used to be four comment lines. It downloaded, and it
+    satisfied anything checking the magic bytes, but no reader would open
+    it — so clicking a seeded file to view it showed "Failed to load PDF
+    document", and a downloaded one would not open either.
+
+    Hand-built rather than adding a PDF library for sixteen seed files:
+    catalog, page tree, one page, one font, one content stream, and an
+    xref table whose byte offsets have to be exact or readers reject it.
+    """
+    text = label.replace("\\", "").replace("(", "").replace(")", "")
+    stream = (
+        b"BT /F1 16 Tf 72 760 Td (Lilkis Deal Room) Tj ET\n"
+        b"BT /F1 11 Tf 72 736 Td (Demo placeholder - not a real document) Tj ET\n"
+        b"BT /F1 12 Tf 72 700 Td (" + text.encode("latin-1", "replace") + b") Tj ET\n"
+    )
+
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+        b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"endstream",
+    ]
+
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{number} 0 obj\n".encode() + body + b"\nendobj\n"
+
+    xref_at = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode()
+    out += b"0000000000 65535 f \n"
+    for offset in offsets:
+        out += f"{offset:010d} 00000 n \n".encode()
+    out += (
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_at}\n%%EOF\n"
+    ).encode()
+    return bytes(out)
 
 
 # (deal short_code, folder name, filename, status, uploader email, days ago)
