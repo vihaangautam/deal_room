@@ -32,6 +32,7 @@ def audit_query(
     action: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
+    q: str | None = None,
     limit: int = 50,
 ) -> Select:
     """Rows as (AuditLog, actor_name, deal_id, deal_name), newest first.
@@ -45,6 +46,18 @@ def audit_query(
     direction uses an index, which is fine at this table's size and under
     a LIMIT, but it is the first thing to look at if the log ever grows
     into the millions.
+
+    q is a free-text match over the things a person actually remembers: a
+    filename, a task title, the deal, who did it, and the detail blob that
+    holds the rest (a rename's old and new names, a stage change's
+    reason). Nobody searching a history recalls the actor and the action
+    type — they recall "the sanction letter", which is why the other
+    filters alone were not enough.
+
+    It is ILIKE '%...%', so it cannot use a btree index and scans. At this
+    table's size that is the right trade for not maintaining a tsvector
+    column; if the log reaches millions of rows, that is the upgrade, and
+    this is where it goes.
     """
     DealDirect = aliased(Deal)
     DealOfDocument = aliased(Deal)
@@ -98,6 +111,22 @@ def audit_query(
         query = query.where(AuditLog.created_at >= since)
     if until:
         query = query.where(AuditLog.created_at <= until)
+    if q and q.strip():
+        # The joins these columns come from are already in the query for
+        # the deal resolution, so searching them costs no extra join.
+        like = f"%{q.strip()}%"
+        query = query.where(
+            or_(
+                cast(AuditLog.detail, Text).ilike(like),
+                AuditLog.action.ilike(like),
+                Document.display_name.ilike(like),
+                Task.title.ilike(like),
+                User.display_name.ilike(like),
+                DealDirect.name.ilike(like),
+                DealOfDocument.name.ilike(like),
+                DealOfTask.name.ilike(like),
+            )
+        )
 
     return query
 

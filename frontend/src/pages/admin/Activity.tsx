@@ -4,6 +4,7 @@ import { ActivityFeed } from "@/components/ActivityFeed"
 import { ActivityFilters } from "@/components/ActivityFilters"
 import { PageBody } from "@/components/PageBody"
 import { TabBand } from "@/components/TabBand"
+import { useDebounced } from "@/hooks/useDebounced"
 import { TableFooter } from "@/components/TableFooter"
 import { PageHeader } from "@/components/PageHeader"
 
@@ -15,8 +16,14 @@ const PAGE_SIZE = 50 // DESIGN.md §6.11
 
 export function Activity() {
   const [filters, setFilters] = useState<AuditFilters>({})
+  const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
-  const { data: logs, isLoading } = useAuditLog({ ...filters, limit: 200 })
+  const debouncedSearch = useDebounced(search)
+  const { data: logs, isLoading } = useAuditLog({
+    ...filters,
+    ...(debouncedSearch.trim() ? { q: debouncedSearch.trim() } : {}),
+    limit: 200,
+  })
 
   function set(patch: Partial<AuditFilters>) {
     setFilters((prev) => {
@@ -33,7 +40,7 @@ export function Activity() {
   const rows = logs ?? []
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const hasFilters = Object.keys(filters).length > 0
+  const hasFilters = debouncedSearch.trim().length > 0 || Object.keys(filters).length > 0
 
   return (
     <>
@@ -45,11 +52,20 @@ export function Activity() {
             onChange={set}
             onClear={() => {
               setFilters({})
+              setSearch("")
               setPage(1)
             }}
             showDeal
           />
         }
+        search={{
+          value: search,
+          onChange: (v) => {
+            setSearch(v)
+            setPage(1)
+          },
+          placeholder: "Search all activity",
+        }}
       />
       <PageBody>
       <p className="mb-4 text-table text-text-tertiary">

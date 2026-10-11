@@ -61,6 +61,7 @@ export function useDealActivity(dealId: string | undefined, filters?: AuditFilte
   if (filters?.action) query.set("action", filters.action)
   if (filters?.since) query.set("since", filters.since)
   if (filters?.until) query.set("until", filters.until)
+  if (filters?.q) query.set("q", filters.q)
   if (filters?.limit) query.set("limit", String(filters.limit))
   const qs = query.toString()
 

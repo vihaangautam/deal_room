@@ -358,6 +358,7 @@ async def get_audit_log(
     action: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
+    q: str | None = None,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
@@ -374,6 +375,7 @@ async def get_audit_log(
             action=action,
             since=since,
             until=until,
+            q=q,
             limit=limit,
         )
     )

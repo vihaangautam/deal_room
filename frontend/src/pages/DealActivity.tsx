@@ -8,6 +8,7 @@ import { ActivityFilters } from "@/components/ActivityFilters"
 import { DealHeader } from "@/components/DealHeader"
 import { PageBody } from "@/components/PageBody"
 import { TabBand } from "@/components/TabBand"
+import { useDebounced } from "@/hooks/useDebounced"
 import { TableFooter } from "@/components/TableFooter"
 
 // Just the history; the comment thread has its own tab (DealComments).
@@ -22,9 +23,12 @@ export function DealActivity() {
   const isAdmin = user?.role === "admin"
   const { data: deal } = useDeal(dealId)
   const [filters, setFilters] = useState<AuditFilters>({})
+  const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
+  const debouncedSearch = useDebounced(search)
   const { data: activity, isLoading } = useDealActivity(isAdmin ? dealId : undefined, {
     ...filters,
+    ...(debouncedSearch.trim() ? { q: debouncedSearch.trim() } : {}),
     limit: 200,
   })
 
@@ -51,9 +55,9 @@ export function DealActivity() {
   const rows = activity ?? []
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const filtered = (Object.keys(filters) as (keyof AuditFilters)[]).some(
-    (k) => k !== "limit" && filters[k],
-  )
+  const filtered =
+    debouncedSearch.trim().length > 0 ||
+    (Object.keys(filters) as (keyof AuditFilters)[]).some((k) => k !== "limit" && filters[k])
 
   return (
     <>
@@ -65,10 +69,19 @@ export function DealActivity() {
             onChange={set}
             onClear={() => {
               setFilters({})
+              setSearch("")
               setPage(1)
             }}
           />
         }
+        search={{
+          value: search,
+          onChange: (v) => {
+            setSearch(v)
+            setPage(1)
+          },
+          placeholder: "Search this history",
+        }}
       />
       <PageBody>
         <div className="overflow-hidden rounded-lg border border-border bg-surface">

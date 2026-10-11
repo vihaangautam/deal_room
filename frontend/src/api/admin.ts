@@ -119,6 +119,9 @@ export interface AuditFilters {
   action?: string
   since?: string
   until?: string
+  /** Free text across filenames, task titles, people, deals and the
+   *  detail blob — what someone actually remembers about a past action. */
+  q?: string
   limit?: number
 }
 
@@ -135,6 +138,7 @@ export function useAuditLog(filters?: AuditFilters) {
   if (filters?.action) query.set("action", filters.action)
   if (filters?.since) query.set("since", filters.since)
   if (filters?.until) query.set("until", filters.until)
+  if (filters?.q) query.set("q", filters.q)
   if (filters?.actorId) query.set("actor_id", filters.actorId)
   if (filters?.limit) query.set("limit", String(filters.limit))
   const qs = query.toString()
