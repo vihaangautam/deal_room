@@ -116,7 +116,13 @@ export function StageChangeDialog({
           onChange={(e) => setReason(e.target.value)}
           className="h-20 rounded-md border border-border bg-surface-sunken p-2 text-body focus:outline-none focus:ring-2 focus:ring-brand-600"
         />
-        <span className="text-meta text-text-tertiary">Recorded in the deal history.</span>
+        {/* The reason is now also posted to the deal's comment thread, and
+            the thread is visible to every member on the deal while the
+            history is admin-only. Saying so here is the difference between
+            a note to the file and a note to the team. */}
+        <span className="text-meta text-text-tertiary">
+          Recorded in the deal history, and posted to Comments for everyone on the deal.
+        </span>
       </label>
 
       <DialogFooter>

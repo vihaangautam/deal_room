@@ -82,6 +82,9 @@ export function useChangeStage(dealId: string) {
     onSuccess: (deal) => {
       qc.invalidateQueries({ queryKey: ["deals"] })
       qc.invalidateQueries({ queryKey: ["deals", dealId, "stage-history"] })
+      // The reason is posted as a comment, so the tab count and the thread
+      // are both stale the moment this returns.
+      qc.invalidateQueries({ queryKey: ["comments", dealId] })
       toast(`Deal moved to ${DEAL_STAGE_LABEL[deal.stage] ?? deal.stage}.`)
     },
   })

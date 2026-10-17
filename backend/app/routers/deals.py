@@ -9,6 +9,7 @@ from app.audit_query import audit_query, to_audit_item
 from app.database import get_db
 from app.deps import accessible_folder_ids, require_admin, require_password_set
 from app.models.audit import AuditLog
+from app.models.comment import Comment
 from app.models.deal import Deal, DealStageHistory
 from app.models.document import Document
 from app.models.task import Task
@@ -278,6 +279,20 @@ async def change_stage(
             entity_id=str(deal.id),
             detail={"from_stage": from_stage, "to_stage": body.to_stage, "reason": body.reason},
             ip_address=request.client.host if request.client else None,
+        )
+    )
+    # The reason is the one sentence of context anyone wants when they open
+    # a deal — "why did this start?", "why was it dropped?" — and it was
+    # only ever readable by an admin, in the history. It opens the thread
+    # instead: on New to Running it becomes the first comment, and on a
+    # close it becomes the last word before the thread goes read-only.
+    # Posted directly rather than through comments._create, which refuses
+    # a closed deal (PRD F3) — the deal is already in its new stage here.
+    db.add(
+        Comment(
+            deal_id=deal.id,
+            author_id=admin.id,
+            body=f"Moved to {body.to_stage.capitalize()} — {body.reason}",
         )
     )
 

@@ -14,10 +14,12 @@ behavior from PRD F1, this is seed data only.
 """
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
 from app.database import async_session_factory
+from app.models.comment import Comment
 from app.models.deal import Deal, DealStageHistory
 from app.models.folder import FolderTemplate, UserFolderPermission
 from app.models.user import User
@@ -137,45 +139,38 @@ async def seed() -> None:
         db.add_all([patel, sharma, mehta, oberoi])
         await db.flush()
 
-        db.add_all(
-            [
+        # (deal, from, to, reason, days ago). A real stage change writes a
+        # history row and posts the reason to the deal's comment thread
+        # (routers/deals.change_stage), so seeded ones do both — otherwise
+        # every seeded deal opens on an empty thread, which is the one
+        # thing the product never produces.
+        transitions = [
+            (sharma, "new", "running", "Term sheet signed, work begins", 21),
+            (mehta, "new", "running", "Term sheet signed, work begins", 90),
+            (mehta, "running", "successful", "Facility fully repaid, security released", 7),
+            (oberoi, "new", "running", "Term sheet signed, work begins", 60),
+            (oberoi, "running", "dropped", "Borrower withdrew application", 14),
+        ]
+        for deal, from_stage, to_stage, reason, days_ago in transitions:
+            when = datetime.now(timezone.utc) - timedelta(days=days_ago)
+            db.add(
                 DealStageHistory(
-                    deal_id=sharma.id,
-                    from_stage="new",
-                    to_stage="running",
+                    deal_id=deal.id,
+                    from_stage=from_stage,
+                    to_stage=to_stage,
                     changed_by=samir.id,
-                    reason="Term sheet signed, work begins",
-                ),
-                DealStageHistory(
-                    deal_id=mehta.id,
-                    from_stage="new",
-                    to_stage="running",
-                    changed_by=samir.id,
-                    reason="Term sheet signed, work begins",
-                ),
-                DealStageHistory(
-                    deal_id=mehta.id,
-                    from_stage="running",
-                    to_stage="successful",
-                    changed_by=samir.id,
-                    reason="Facility fully repaid, security released",
-                ),
-                DealStageHistory(
-                    deal_id=oberoi.id,
-                    from_stage="new",
-                    to_stage="running",
-                    changed_by=samir.id,
-                    reason="Term sheet signed, work begins",
-                ),
-                DealStageHistory(
-                    deal_id=oberoi.id,
-                    from_stage="running",
-                    to_stage="dropped",
-                    changed_by=samir.id,
-                    reason="Borrower withdrew application",
-                ),
-            ]
-        )
+                    reason=reason,
+                    changed_at=when,
+                )
+            )
+            db.add(
+                Comment(
+                    deal_id=deal.id,
+                    author_id=samir.id,
+                    body=f"Moved to {to_stage.capitalize()} — {reason}",
+                    created_at=when,
+                )
+            )
 
         await db.commit()
         print("Seeded: samir@lilkis.in, rohan@lilkis.in, meera@lilkis.in (password: changeme123)")
