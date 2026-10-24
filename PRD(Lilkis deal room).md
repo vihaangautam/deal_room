@@ -137,8 +137,10 @@ Two roles (Admin and Member) plus one capability flag (`can_approve`). Rationale
 
 ### F7. Approvals queue (approvers)
 
-- Table of pending requests: checkbox, Type, Item, Deal, Folder, Requested by, Requested on, Note.
+- Table of pending requests: checkbox, Type, Item, Deal, Folder, Requested by, Requested on, Their note, Your reply.
 - Filters: deal, requester, type. "Select all" checkbox plus **Approve selected** and **Reject selected**. Reject opens a dialog with optional reason.
+- **Replying.** The approver can type a reply against any row. It rides along with the next Approve or Reject on that row, and beats the batch's shared reason for that row, so telling one person something of their own is still one pass down the queue. An approval with nothing written posts nothing.
+- A reply is posted as a comment, authored by the approver, on the thread the request came from — the task's where there is one, the deal's otherwise. The requester is not an approver and never sees this queue, so an answer that stays here is an answer nobody reads; in the thread they can also reply to it. Everyone on that deal can see it, which the queue says on screen.
 - Pending count badge in navigation; refreshes every 60 seconds and after any mutation.
 - Bulk actions return a per-item result. If one item was already decided, the others still succeed and a toast reports "11 approved, 1 already handled".
 

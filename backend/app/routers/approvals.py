@@ -11,6 +11,7 @@ from app.database import get_db
 from app.deps import require_password_set
 from app.models.approval import ApprovalRequest
 from app.models.audit import AuditLog
+from app.models.comment import Comment
 from app.models.deal import Deal
 from app.models.document import Document
 from app.models.folder import FolderTemplate
@@ -67,6 +68,58 @@ async def _mark_tasks_needs_attention(db: AsyncSession, document_id: uuid.UUID) 
             task.needs_attention = True
 
 
+# What the decision was about, for the sentence posted to the thread.
+DECISION_SUBJECT = {
+    "document_upload": "the upload of",
+    "document_delete": "the deletion of",
+    "task_reassign": "the reassignment of",
+    "task_delete": "the deletion of",
+}
+
+
+async def _post_decision_note(
+    db: AsyncSession,
+    approval: ApprovalRequest,
+    action: str,
+    note: str,
+    reviewer: User,
+    deal_id: uuid.UUID,
+    task_id: uuid.UUID | None,
+    item_name: str,
+) -> None:
+    """Put the reviewer's note where the person who asked will find it.
+
+    review_note has been written on every decision since the beginning and
+    read by nothing, so the reject dialog's "Reason (shown to the
+    requester)" was a promise the app didn't keep: the file went red and
+    nobody was told why.
+
+    A comment rather than a field on the row, because the reply is the
+    start of a conversation — "missing the board resolution" wants
+    "re-uploaded, please look again" under it — and a string on a table
+    cell is a dead end. It also costs no new screen: the thread is built,
+    it has an unread-ish count in the tab bar, and everyone on the deal
+    can see it, which is the nearest thing to a notification in an app
+    whose PRD puts email in Phase 3.
+
+    Only when there is something to say. A bare approval posts nothing —
+    the file going active is the message, and PRD F7 wants forty of them
+    to go through in one action without forty announcements.
+
+    It goes to the task's thread when the request came from a task, so
+    the answer lands beside the work; otherwise to the deal's.
+    """
+    verb = "Approved" if action == "approve" else "Rejected"
+    db.add(
+        Comment(
+            deal_id=deal_id,
+            task_id=task_id,
+            author_id=reviewer.id,
+            body=f"{verb} {DECISION_SUBJECT[approval.type]} '{item_name}' — {note.strip()}",
+        )
+    )
+
+
 async def _apply_decision(
     db: AsyncSession,
     approval: ApprovalRequest,
@@ -78,6 +131,11 @@ async def _apply_decision(
     approval.reviewed_by = reviewer.id
     approval.review_note = note
     approval.reviewed_at = datetime.now(timezone.utc)
+
+    # Filled in by whichever branch below runs, for the note comment.
+    deal_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
+    item_name = ""
 
     if approval.type == "document_upload":
         doc = await db.get(Document, approval.document_id)
@@ -100,6 +158,10 @@ async def _apply_decision(
         else:
             doc.status = "rejected"
             await _mark_tasks_needs_attention(db, doc.id)
+        deal_id, item_name = doc.deal_id, doc.display_name
+        # An upload made from a task is answered in that task's thread.
+        linked = await _linked_task_ids(db, doc.id)
+        task_id = linked[0] if linked else None
 
     elif approval.type == "document_delete":
         doc = await db.get(Document, approval.document_id)
@@ -112,6 +174,9 @@ async def _apply_decision(
         # back to active (the file was live the whole time it was
         # delete_requested).
         doc.status = "archived" if action == "approve" else "active"
+        deal_id, item_name = doc.deal_id, doc.display_name
+        linked = await _linked_task_ids(db, doc.id)
+        task_id = linked[0] if linked else None
 
     elif approval.type == "task_reassign":
         task = await db.get(Task, approval.task_id)
@@ -123,6 +188,7 @@ async def _apply_decision(
             task.assigned_by = approval.requested_by
         # Reject: task stays exactly as it was (PRD: "stays with the
         # current assignee until approved").
+        deal_id, task_id, item_name = task.deal_id, task.id, task.title
 
     elif approval.type == "task_delete":
         task = await db.get(Task, approval.task_id)
@@ -130,6 +196,17 @@ async def _apply_decision(
             raise HTTPException(status_code=404, detail="The item this approval refers to is gone")
         if action == "approve":
             task.deleted = True
+        deal_id, item_name = task.deal_id, task.title
+        # An approved deletion takes the thread with it, so the answer
+        # goes to the deal instead — "deleted SHRM-4, it was a duplicate"
+        # is exactly the note someone will go looking for, and a comment
+        # inside a deleted task is a comment nobody can reach.
+        task_id = None if action == "approve" else task.id
+
+    if note and note.strip() and deal_id is not None:
+        await _post_decision_note(
+            db, approval, action, note, reviewer, deal_id, task_id, item_name
+        )
 
     db.add(
         AuditLog(
@@ -269,7 +346,9 @@ async def bulk_action(
             result.already_handled += 1
             continue
         try:
-            await _apply_decision(db, approval, body.action, body.note, reviewer)
+            # A reply typed on the row beats the batch's shared reason.
+            note = body.notes.get(approval_id) or body.note
+            await _apply_decision(db, approval, body.action, note, reviewer)
             await db.commit()
             if body.action == "approve":
                 result.approved += 1

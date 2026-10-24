@@ -41,7 +41,7 @@ function RejectDialog({
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        placeholder="Reason (shown to the requester)"
+        placeholder="Reason — posted to the thread, where they will see it"
         className="h-20 w-full rounded-md border border-border bg-surface-sunken p-2 text-body focus:outline-none focus:ring-2 focus:ring-brand-600"
       />
       <DialogFooter>
@@ -74,6 +74,18 @@ export function Approvals() {
   const bulkAction = useBulkApprovalAction()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [rejectOpen, setRejectOpen] = useState(false)
+  // What Samir is telling each requester, by row id. Kept here rather
+  // than in each Row so it survives the row re-rendering and so the bulk
+  // bar can send the lot in one action.
+  const [replies, setReplies] = useState<Record<string, string>>({})
+
+  // Only for the rows being acted on, and only the ones with something
+  // written in them — an empty box must not post "Approved — ".
+  function repliesFor(ids: string[]): Record<string, string> {
+    return Object.fromEntries(
+      ids.map((id) => [id, replies[id]?.trim() ?? ""]).filter(([, text]) => text),
+    )
+  }
 
   const all = approvals ?? []
   const countFor = (id: ApprovalType | "all") =>
@@ -105,8 +117,14 @@ export function Approvals() {
   }
 
   async function approveSelected() {
-    const result = await bulkAction.mutateAsync({ ids: Array.from(selected), action: "approve" })
+    const ids = Array.from(selected)
+    const result = await bulkAction.mutateAsync({
+      ids,
+      action: "approve",
+      notes: repliesFor(ids),
+    })
     setSelected(new Set())
+    setReplies({})
     // DESIGN.md §5.11: "16 approved." or "15 approved, 1 already
     // handled by Samir" — the per-item result, not a generic success.
     toast(
@@ -117,8 +135,15 @@ export function Approvals() {
   }
 
   async function rejectSelected(note: string) {
-    const result = await bulkAction.mutateAsync({ ids: Array.from(selected), action: "reject", note })
+    const ids = Array.from(selected)
+    const result = await bulkAction.mutateAsync({
+      ids,
+      action: "reject",
+      note,
+      notes: repliesFor(ids),
+    })
     setSelected(new Set())
+    setReplies({})
     setRejectOpen(false)
     toast(`${result.rejected} rejected.`)
   }
@@ -170,6 +195,11 @@ export function Approvals() {
           </div>
         )}
 
+        <p className="mb-3 text-meta text-text-tertiary">
+          A reply is posted as a comment on the task it came from, or on the deal — so the
+          person who asked, and everyone else on that deal, can read it and answer back.
+        </p>
+
         <div className="overflow-hidden rounded-lg border border-border bg-surface">
         <table className="w-full">
           <thead>
@@ -192,7 +222,8 @@ export function Approvals() {
               <th className="px-4 font-medium">Deal</th>
               <th className="px-4 font-medium">Requested by</th>
               <th className="px-4 font-medium">Requested on</th>
-              <th className="px-4 font-medium">Note</th>
+              <th className="px-4 font-medium">Their note</th>
+              <th className="px-4 font-medium">Your reply</th>
               <th className="w-10 px-2" />
             </tr>
           </thead>
@@ -200,14 +231,14 @@ export function Approvals() {
             {isLoading &&
               [0, 1].map((i) => (
                 <tr key={i} className="h-9 border-t border-border">
-                  <td colSpan={7} className="px-4">
+                  <td colSpan={8} className="px-4">
                     <div className="h-3 w-1/3 animate-pulse rounded bg-surface-sunken" />
                   </td>
                 </tr>
               ))}
             {!isLoading && rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center">
+                <td colSpan={8} className="px-4 py-10 text-center">
                   <p className="text-body-strong text-text-primary">Nothing waiting for approval</p>
                   <p className="text-table text-text-secondary">
                     New uploads, deletions and reassignments will appear here.
@@ -216,7 +247,14 @@ export function Approvals() {
               </tr>
             )}
             {rows.map((row) => (
-              <Row key={row.id} row={row} checked={selected.has(row.id)} onToggle={() => toggle(row.id)} />
+              <Row
+                key={row.id}
+                row={row}
+                checked={selected.has(row.id)}
+                onToggle={() => toggle(row.id)}
+                reply={replies[row.id] ?? ""}
+                onReply={(text) => setReplies((prev) => ({ ...prev, [row.id]: text }))}
+              />
             ))}
           </tbody>
         </table>
@@ -235,7 +273,19 @@ export function Approvals() {
   )
 }
 
-function Row({ row, checked, onToggle }: { row: ApprovalItem; checked: boolean; onToggle: () => void }) {
+function Row({
+  row,
+  checked,
+  onToggle,
+  reply,
+  onReply,
+}: {
+  row: ApprovalItem
+  checked: boolean
+  onToggle: () => void
+  reply: string
+  onReply: (text: string) => void
+}) {
   return (
     <tr className="group h-9 border-t border-border hover:bg-surface-hover">
       <td className="px-4">
@@ -278,6 +328,22 @@ function Row({ row, checked, onToggle }: { row: ApprovalItem; checked: boolean; 
       <td className="px-4 text-meta text-text-tertiary">{formatDateTime(row.requested_at)}</td>
       <td className="max-w-48 truncate px-4 text-meta text-text-tertiary" title={row.note ?? undefined}>
         {row.note ?? "—"}
+      </td>
+      <td className="px-4">
+        {/* Typing here doesn't send anything on its own — it rides along
+            with the next Approve or Reject on this row, so one pass down
+            the queue is one action. Checking the row as soon as there is
+            something to say saves going back for the checkbox. */}
+        <input
+          value={reply}
+          onChange={(e) => {
+            onReply(e.target.value)
+            if (e.target.value.trim() && !checked) onToggle()
+          }}
+          placeholder="Reply to them…"
+          aria-label={`Reply about ${row.item_label}`}
+          className="h-7 w-44 rounded border border-border bg-surface-sunken px-2 text-meta text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-brand-600"
+        />
       </td>
       <td className="w-10 px-2">
         {row.document_id && (

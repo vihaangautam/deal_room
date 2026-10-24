@@ -21,12 +21,21 @@ export function useApprovals(filters?: { dealId?: string; requestedBy?: string; 
 export function useBulkApprovalAction() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: { ids: string[]; action: "approve" | "reject"; note?: string }) =>
-      apiFetch<BulkActionResult>("/approvals/bulk", { method: "POST", body }),
+    mutationFn: (body: {
+      ids: string[]
+      action: "approve" | "reject"
+      /** One reason for the whole batch. */
+      note?: string
+      /** A reply typed against one row, which wins over `note` for it. */
+      notes?: Record<string, string>
+    }) => apiFetch<BulkActionResult>("/approvals/bulk", { method: "POST", body }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["approvals"] })
       qc.invalidateQueries({ queryKey: ["deals"] })
       qc.invalidateQueries({ queryKey: ["tasks"] })
+      // A reply is posted to the thread it belongs to, so the comment
+      // counts in the deal tab bar are stale the moment this returns.
+      qc.invalidateQueries({ queryKey: ["comments"] })
       // document_upload and document_delete decisions are exactly what
       // moves a document between pending/active/archived.
       qc.invalidateQueries({ queryKey: ["documents"] })

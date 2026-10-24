@@ -24,7 +24,13 @@ class ApprovalItem(BaseModel):
 class BulkActionRequest(BaseModel):
     ids: list[uuid.UUID]
     action: Literal["approve", "reject"]
+    # One reason for the whole batch — what the reject dialog collects.
     note: str | None = None
+    # A reply typed against one row, which wins over the batch note for
+    # that row. The queue is a table, and "approve these twelve, but tell
+    # Meera why the KYC pack is going back" is one action to the person
+    # doing it, not twelve.
+    notes: dict[uuid.UUID, str] = {}
 
 
 class BulkActionResult(BaseModel):
