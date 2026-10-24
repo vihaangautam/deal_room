@@ -196,6 +196,8 @@ export interface ArchiveItem {
   deleted_by_name: string | null
   approved_by_name: string | null
   deleted_at: string
+  /** When the purge job takes it for good; null under "Keep forever". */
+  purge_after: string | null
   reason: string | null
 }
 

@@ -71,6 +71,11 @@ class ArchiveItem(BaseModel):
     deleted_by_name: str | None
     approved_by_name: str | None
     deleted_at: datetime
+    # When the purge job will take this file for good, or None under
+    # "Keep forever". The deadline is computed server-side so there is one
+    # definition of it — the browser working it out from the retention
+    # setting is a second one, free to drift from jobs/purge.py.
+    purge_after: datetime | None = None
     reason: str | None
 
 

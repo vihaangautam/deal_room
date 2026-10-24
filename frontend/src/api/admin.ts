@@ -172,6 +172,9 @@ export function useUpdateSettings() {
       apiFetch<Settings>("/admin/settings", { method: "PATCH", body }),
     onSuccess: (settings) => {
       qc.invalidateQueries({ queryKey: ["admin", "settings"] })
+      // Every archive row carries its own purge deadline, computed from
+      // this setting, so changing it just changed all of them.
+      qc.invalidateQueries({ queryKey: ["admin", "archive"] })
       toast(
         settings.archive_retention_days === null
           ? "Archive files are now kept forever."

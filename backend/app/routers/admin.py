@@ -1,6 +1,6 @@
 import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
@@ -333,6 +333,11 @@ async def list_archive(
         .correlate(Document)
         .scalar_subquery()
     )
+    # The same deadline jobs/purge.purge_archived sweeps on: updated_at is
+    # when the document was archived, and null retention means never.
+    retention = await db.get(Setting, "archive_retention_days")
+    retention_days = int(retention.value) if retention and retention.value else None
+
     rows = await db.execute(
         select(Document, Deal.name, FolderTemplate.name, Uploader.display_name, Approver.display_name, latest_reason)
         .join(Deal, Deal.id == Document.deal_id)
@@ -352,6 +357,9 @@ async def list_archive(
             deleted_by_name=uploader_name,
             approved_by_name=approver_name,
             deleted_at=doc.updated_at,
+            purge_after=(
+                doc.updated_at + timedelta(days=retention_days) if retention_days else None
+            ),
             reason=reason,
         )
         for doc, deal_name, folder_name, uploader_name, approver_name, reason in rows

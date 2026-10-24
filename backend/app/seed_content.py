@@ -34,6 +34,7 @@ from app.models.comment import Comment
 from app.models.deal import Deal
 from app.models.document import Document
 from app.models.folder import FolderTemplate
+from app.models.settings import Setting
 from app.models.task import Task, TaskAttachment
 from app.models.user import User
 from app.storage import ensure_bucket, object_exists, put_object
@@ -102,8 +103,13 @@ DOCUMENTS: list[tuple[str, str, str, str, str, int]] = [
     ("SHRM", "Security documents", "Hypothecation deed signed.pdf", "pending", "meera@lilkis.in", 1),
     # delete_requested: still downloadable, with a request waiting (PRD §10)
     ("SHRM", "Agreements", "Charge annexure superseded.docx", "delete_requested", "rohan@lilkis.in", 10),
-    # archived: gives the Archive page a row
+    # archived: the Archive is this app's Recently Deleted, so it needs
+    # enough rows, across enough deals, folders and people, for its
+    # filters and its countdown to be worth anything.
     ("SHRM", "Miscellaneous", "Site visit photos old.pdf", "archived", "rohan@lilkis.in", 30),
+    ("SHRM", "Agreements", "Facility agreement draft v2.pdf", "archived", "meera@lilkis.in", 12),
+    ("MEHT", "Bank documents", "ICICI statement duplicate.pdf", "archived", "meera@lilkis.in", 3),
+    ("OBRT", "Legal documents", "Draft opinion superseded.pdf", "archived", "rohan@lilkis.in", 55),
     # MEHT — closed successfully, everything read-only
     ("MEHT", "Agreements", "Facility agreement executed.pdf", "active", "samir@lilkis.in", 240),
     ("MEHT", "Bank documents", "Final repayment advice.pdf", "active", "rohan@lilkis.in", 95),
@@ -317,6 +323,20 @@ async def seed_content(db: AsyncSession) -> None:
     # and one file actually filed in one, so the folder isn't just a label
     created[("SHRM", "Credit committee minutes 12 Sep.pdf")].folder_id = sep_2025.id
 
+    # ------------------------------------------------------------ settings
+    # The demo runs with a 30-day window so the Archive shows its
+    # countdown. The application default is still "Keep forever" (PRD
+    # F11) — seed data is not the place to decide that files in a
+    # regulated room should start destroying themselves.
+    # The migration already inserts this key with a null value, so the
+    # test is "nobody has chosen yet", not "no row" — which is why the
+    # first version of this silently did nothing.
+    retention = await db.get(Setting, "archive_retention_days")
+    if retention is None:
+        db.add(Setting(key="archive_retention_days", value=30))
+    elif retention.value is None:
+        retention.value = 30
+
     # ----------------------------------------------------------- comments
     thread_root = Comment(
         deal_id=sharma.id,
@@ -402,7 +422,7 @@ async def seed_content(db: AsyncSession) -> None:
     await db.commit()
     print(
         f"Seeded content: {len(DOCUMENTS)} documents, {len(TASKS)} tasks on SHRM, "
-        "4 comments (one a reply), 3 pending approvals, 1 archived file."
+        "4 comments (one a reply), 3 pending approvals, 4 archived files."
     )
 
 

@@ -228,6 +228,22 @@ is a feature built on a guess.
 
 ### F10. Admin: Archive and Activity
 
+**Archive = Recently Deleted.** A file approved for deletion sits here
+until the retention window runs out, and can be recovered or removed for
+good before then.
+
+- Each row shows how long is left ("27 days left", "Due for deletion" once
+  past, "Kept forever" under the default). The deadline is computed
+  server-side from `archive_retention_days` and the time the file was
+  archived — the same setting and timestamp the purge job sweeps on, so
+  the number on screen is the one that will actually be acted on.
+- Restore puts the file back where it was, active, and out of the window.
+- Delete permanently removes the object from storage now. The row stays
+  (Goal G5), so who uploaded and deleted it is still on the record.
+- Filters: deal, folder, who deleted it, date range, plus a keyword search
+  over the filename, the reason, the deal and the folder. Options are
+  drawn from what is in the Archive, not from every deal in the app.
+
 - **Archive:** deleted documents with deal, folder, deleted-by, approved-by, date and reason. Admin can download or restore. Restoring is audited.
 - **Activity:** filterable log by deal, user, action type and date range, read-only. UI may be deferred after the demo; recording starts on day one.
 
