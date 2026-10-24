@@ -189,6 +189,22 @@ Two roles (Admin and Member) plus one capability flag (`can_approve`). Rationale
 - Create user with name, email, temporary password (or generated 14-character one), role, `can_approve`, and initial folder levels.
 - Deactivate or reactivate. No delete. Deactivated users stay in history and on assignments, marked "(deactivated)".
 - Reset password: sets a new temporary password and forces a change.
+- Change an existing user's role between Member and Admin. Confirmed in a dialog, and logged as `user.role_changed`.
+
+**The owner.** One account is the owner — Samir, the sponsor the deal room
+belongs to. The owner is always an admin, and:
+
+- Only the owner can make or unmake an admin, whether by changing an existing
+  user's role or by creating a new user who is an admin. Every other part of
+  managing users stays open to all admins, per §7.
+- Nobody can change the owner's role, active status or `can_approve` — not
+  another admin, and not the owner himself, so there is no path to it at all.
+- Nobody can change their own role or status either, which also stops an admin
+  deactivating their own account by accident.
+
+Transferring ownership is not in v1. It is one row in the database, and the
+alternative — a transfer flow nobody will use before the fund changes hands —
+is a feature built on a guess.
 
 ### F10. Admin: Archive and Activity
 
@@ -211,6 +227,7 @@ C = Contribute, V = View, N = None on the relevant folder. Admin always acts as 
 | See all deals and folder names | Yes | Yes | Yes | Yes |
 | Create deal / change stage / reopen | Yes | No | No | No |
 | Manage folders, users, permissions, settings | Yes | No | No | No |
+| Make or unmake an admin | Owner only | No | No | No |
 | List active files in folder | Yes | Yes | Yes | No (lock row) |
 | Download active file | Yes | Yes | Yes | No |
 | Upload (open deal) | Yes, auto-approved | Yes, pending | No | No |

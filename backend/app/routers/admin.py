@@ -40,6 +40,61 @@ def _generate_temp_password() -> str:
     return secrets.token_urlsafe(11)[:14]
 
 
+# Changing any of these three is what "has access" means: the role, whether
+# the account works at all, and whether it can approve. They move together
+# because they are the ways an account can be taken away from someone.
+ACCESS_FIELDS = {"role", "is_active", "can_approve"}
+
+
+async def _guard_access_change(
+    db: AsyncSession, target: User, actor: User, fields: set[str]
+) -> None:
+    """PRD F9: Samir can make other admins; nobody can unmake him.
+
+    An admin is an ordinary grant — given and taken back as people join and
+    leave. The owner is not: he is the fund sponsor the deal room belongs
+    to, and the regulated files in it are his. Without this a second admin
+    could demote or deactivate him and lock him out of his own room, with
+    no way back that doesn't involve someone with a psql prompt.
+
+    Three rules, and the first two together are the promise:
+
+      * the owner's access can't be changed by anyone else, and
+      * nobody changes their own — which covers the owner changing his own,
+        so there is no route to it at all, not even a determined one; it
+        also stops any admin deactivating themselves by accident, and
+        costs nothing, because nobody needs to edit their own row.
+      * only the owner hands out the admin role, so a promoted admin can't
+        mint more admins and the room can't quietly grow a second power
+        centre. Every other part of managing users stays open to all
+        admins, per PRD §7.
+    """
+    touched = fields & ACCESS_FIELDS
+    if not touched:
+        return
+
+    if target.is_owner and target.id != actor.id:
+        raise HTTPException(
+            status_code=403,
+            detail="The owner's access can't be changed.",
+        )
+    if target.id == actor.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can't change your own role or access. Ask another admin.",
+        )
+    if "role" in touched and not actor.is_owner:
+        # No owner at all means an older database that predates the column.
+        # Falling back to "any admin" keeps it working as it did rather
+        # than locking role changes away from everyone, which is the only
+        # other thing this could do.
+        if await db.scalar(select(User.id).where(User.is_owner)) is not None:
+            raise HTTPException(
+                status_code=403,
+                detail="Only the owner can change who is an admin.",
+            )
+
+
 @router.get("/users", response_model=list[UserRead])
 async def list_users(
     db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)
@@ -61,6 +116,7 @@ async def list_users(
             display_name=user.display_name,
             email=user.email,
             role=user.role,
+            is_owner=user.is_owner,
             can_approve=user.can_approve,
             is_active=user.is_active,
             created_at=user.created_at,
@@ -82,6 +138,14 @@ async def create_user(
     existing = await db.scalar(select(User).where(User.email == body.email))
     if existing:
         raise HTTPException(status_code=409, detail="A user with this email already exists")
+
+    if body.role == "admin" and not admin.is_owner:
+        # Otherwise "only the owner promotes" is worth nothing: any admin
+        # could create a second admin account and sign in as it.
+        if await db.scalar(select(User.id).where(User.is_owner)) is not None:
+            raise HTTPException(
+                status_code=403, detail="Only the owner can add another admin."
+            )
 
     temp_password = body.temporary_password or _generate_temp_password()
     user = User(
@@ -130,13 +194,17 @@ async def update_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     updates = body.model_dump(exclude_unset=True)
+    await _guard_access_change(db, user, admin, set(updates))
     for field, value in updates.items():
         setattr(user, field, value)
 
     db.add(
         AuditLog(
             actor_id=admin.id,
-            action="user.updated",
+            # A role change is the one entry anyone auditing this room will
+            # look for by name, so it gets its own action rather than
+            # hiding inside the generic user.updated rows.
+            action="user.role_changed" if "role" in updates else "user.updated",
             entity_type="user",
             entity_id=str(user.id),
             detail=updates,

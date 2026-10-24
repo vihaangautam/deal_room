@@ -34,6 +34,8 @@ class UserRead(BaseModel):
     display_name: str
     email: str
     role: str
+    # The owner's row renders differently and has no role actions on it.
+    is_owner: bool = False
     can_approve: bool
     is_active: bool
     created_at: datetime

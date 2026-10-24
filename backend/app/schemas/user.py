@@ -14,6 +14,9 @@ class UserMe(BaseModel):
     email: str
     display_name: str
     role: str
+    # Only the owner may change anyone's role, so the browser needs to know
+    # whether the person signed in is them before it offers the action.
+    is_owner: bool
     can_approve: bool
     must_change_password: bool
 

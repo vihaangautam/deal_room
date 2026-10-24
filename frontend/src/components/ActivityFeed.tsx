@@ -28,6 +28,7 @@ const PHRASE: Record<string, string> = {
   "approval.rejected": "rejected a request",
   "user.created": "added a user",
   "user.updated": "changed a user",
+  "user.role_changed": "changed a user's role",
   "user.password_reset": "reset a password",
   "permission.changed": "changed folder access",
   "auth.login_succeeded": "signed in",
@@ -53,6 +54,9 @@ export function describeActivity(item: AuditLogItem): string {
 
   if (item.action === "deal.stage_changed" && typeof d.to_stage === "string") {
     parts.push(`from ${d.from_stage} to ${d.to_stage}`)
+  }
+  if (item.action === "user.role_changed" && typeof d.role === "string") {
+    parts.push(`to ${d.role}`)
   }
   if (typeof d.reason === "string" && d.reason) parts.push(`— ${d.reason}`)
 

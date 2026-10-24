@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useAdminUsers, useCreateUser, usePermissionMatrix, useResetPassword, useSetPermission, useUpdateUser } from "@/api/admin"
 import { useFolders } from "@/api/folders"
+import { useAuthStore } from "@/stores/auth"
 import { Button } from "@/components/ui/button"
 import { PageBody } from "@/components/PageBody"
 import { UseALaptop } from "@/components/UseALaptop"
@@ -37,6 +38,7 @@ function generatePassword(): string {
 
 function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const createUser = useCreateUser()
+  const me = useAuthStore((s) => s.user)
   const { data: users } = useAdminUsers()
   const { data: permissions } = usePermissionMatrix()
   const [name, setName] = useState("")
@@ -47,6 +49,8 @@ function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
   const [copyFrom, setCopyFrom] = useState("")
   const [copied, setCopied] = useState(false)
   const [result, setResult] = useState<{ email: string; temporary_password: string } | null>(null)
+
+  const ownerName = (users ?? []).find((u) => u.is_owner)?.display_name
 
   // "Copy folder access from (a user, or Set manually)" — read off the
   // permission matrix that is already loaded for the other tab.
@@ -110,17 +114,26 @@ function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
         <Field label="Email" htmlFor="u-email">
           <Input id="u-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
+        {/* Only the owner mints admins — otherwise the rule on the row
+            menu is worth nothing, since any admin could create a second
+            admin account here instead. The API refuses it either way. */}
         <Field label="Role" htmlFor="u-role">
-          <div className="flex gap-4">
-            <label className="flex items-center gap-1.5 text-body text-text-primary">
-              <input type="radio" checked={role === "member"} onChange={() => setRole("member")} />
-              Member
-            </label>
-            <label className="flex items-center gap-1.5 text-body text-text-primary">
-              <input type="radio" checked={role === "admin"} onChange={() => setRole("admin")} />
-              Admin
-            </label>
-          </div>
+          {me?.is_owner ? (
+            <div className="flex gap-4">
+              <label className="flex items-center gap-1.5 text-body text-text-primary">
+                <input type="radio" checked={role === "member"} onChange={() => setRole("member")} />
+                Member
+              </label>
+              <label className="flex items-center gap-1.5 text-body text-text-primary">
+                <input type="radio" checked={role === "admin"} onChange={() => setRole("admin")} />
+                Admin
+              </label>
+            </div>
+          ) : (
+            <p className="text-body text-text-secondary">
+              Member. Only {ownerName ?? "the owner"} can add an admin.
+            </p>
+          )}
         </Field>
         <label className="flex items-center gap-2 text-body text-text-primary">
           <input type="checkbox" checked={canApprove} onChange={(e) => setCanApprove(e.target.checked)} />
@@ -196,18 +209,37 @@ function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v
 }
 
 function UserRow({ user }: { user: UserAdmin }) {
+  const me = useAuthStore((s) => s.user)
   const updateUser = useUpdateUser()
   const resetPassword = useResetPassword()
   const [resetResult, setResetResult] = useState<string | null>(null)
+  const [roleConfirm, setRoleConfirm] = useState(false)
+
+  // The same three rules the API enforces (admin._guard_access_change),
+  // mirrored here only so the menu doesn't offer what the server will
+  // refuse. CLAUDE.md §2.3: this is not the enforcement.
+  const isSelf = me?.id === user.id
+  const canChangeAccess = !user.is_owner && !isSelf
+  const canChangeRole = canChangeAccess && !!me?.is_owner
+  const promoting = user.role === "member"
 
   return (
-    <tr className="h-10 border-t border-border hover:bg-surface-hover">
+    <tr className="group h-10 border-t border-border hover:bg-surface-hover">
       <td className="px-4 text-table font-medium text-text-primary">
         {user.display_name}
         {!user.is_active && <span className="ml-1 text-text-tertiary">(deactivated)</span>}
       </td>
       <td className="px-4 text-table text-text-secondary">{user.email}</td>
-      <td className="px-4 text-table capitalize text-text-secondary">{user.role}</td>
+      <td className="px-4 text-table capitalize text-text-secondary">
+        {user.role}
+        {/* Says why this row has no role actions, rather than leaving an
+            admin to wonder why the menu is shorter here. */}
+        {user.is_owner && (
+          <span className="ml-1.5 rounded bg-pill-neutral-bg px-1.5 py-0.5 text-meta uppercase tracking-wide text-pill-neutral-text">
+            Owner
+          </span>
+        )}
+      </td>
       <td className="px-4 text-table text-text-secondary">{user.can_approve ? "Yes" : "No"}</td>
       <td className="px-4 text-table text-text-secondary">{user.is_active ? "Active" : "Deactivated"}</td>
       <td className="px-4 text-table text-text-tertiary">
@@ -223,11 +255,54 @@ function UserRow({ user }: { user: UserAdmin }) {
           >
             Reset password
           </RowMenuItem>
-          <RowMenuItem onSelect={() => updateUser.mutate({ userId: user.id, is_active: !user.is_active })}>
-            {user.is_active ? "Deactivate" : "Reactivate"}
-          </RowMenuItem>
+          {canChangeRole && (
+            <RowMenuItem onSelect={() => setRoleConfirm(true)}>
+              {promoting ? "Make admin" : "Make member"}
+            </RowMenuItem>
+          )}
+          {canChangeAccess && (
+            <RowMenuItem
+              danger={user.is_active}
+              onSelect={() => updateUser.mutate({ userId: user.id, is_active: !user.is_active })}
+            >
+              {user.is_active ? "Deactivate" : "Reactivate"}
+            </RowMenuItem>
+          )}
         </RowMenu>
       </td>
+
+      {/* Admin is full access to every folder, Borrower details included,
+          and it is one click away in a menu next to "Reset password".
+          Worth a sentence and a second click. */}
+      <Dialog
+        open={roleConfirm}
+        onOpenChange={setRoleConfirm}
+        title={promoting ? `Make ${user.display_name} an admin?` : `Make ${user.display_name} a member?`}
+        width={440}
+      >
+        <p className="text-body text-text-secondary">
+          {promoting
+            ? "Admins see and change every folder in every deal, including ones this person has no access to today, and can manage folders, settings and the Archive."
+            : "They keep their account and their folder access, but lose the Archive, Activity, deal stages and everything else under Admin."}
+        </p>
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => setRoleConfirm(false)}>
+            Cancel
+          </Button>
+          <Button
+            loading={updateUser.isPending}
+            onClick={async () => {
+              await updateUser.mutateAsync({
+                userId: user.id,
+                role: promoting ? "admin" : "member",
+              })
+              setRoleConfirm(false)
+            }}
+          >
+            {promoting ? "Make admin" : "Make member"}
+          </Button>
+        </DialogFooter>
+      </Dialog>
 
       <Dialog open={resetResult !== null} onOpenChange={() => setResetResult(null)} title="Password reset" width={400}>
         <p className="text-body text-text-secondary">New temporary password for {user.display_name}:</p>

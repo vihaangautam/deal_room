@@ -5,6 +5,8 @@ export interface User {
   email: string
   display_name: string
   role: "admin" | "member"
+  /** The owner can hand out the admin role; nobody can take his away. */
+  is_owner: boolean
   can_approve: boolean
   must_change_password: boolean
 }
@@ -162,6 +164,7 @@ export interface UserAdmin {
   display_name: string
   email: string
   role: "admin" | "member"
+  is_owner: boolean
   can_approve: boolean
   is_active: boolean
   created_at: string

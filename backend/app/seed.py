@@ -56,6 +56,7 @@ async def seed() -> None:
             display_name="Samir Biyani",
             hashed_pw=password_helper.hash("changeme123"),
             role="admin",
+            is_owner=True,  # the deal room is his; nobody can take this away
             can_approve=True,
             must_change_password=False,
         )

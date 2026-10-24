@@ -35,6 +35,12 @@ CREATE TABLE users (
     hashed_pw     TEXT NOT NULL,
     role          TEXT NOT NULL DEFAULT 'member'
                   CHECK (role IN ('admin','member')),
+    -- The person whose deal room this is. An admin can be made and unmade;
+    -- the owner cannot, by anyone, which is what stops a second admin from
+    -- locking the sponsor out of his own regulated document room. The
+    -- CHECK keeps the pair honest: an owner is always an admin.
+    is_owner      BOOLEAN NOT NULL DEFAULT FALSE
+                  CHECK (NOT is_owner OR role = 'admin'),
     can_approve   BOOLEAN NOT NULL DEFAULT FALSE,
     is_active     BOOLEAN NOT NULL DEFAULT TRUE,
     -- Not in ARCHITECTURE.md's original DDL; added for PRD F1's forced
@@ -43,6 +49,11 @@ CREATE TABLE users (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- At most one owner, enforced here rather than in the app: "there is one
+-- of these" is the kind of rule that survives a second API process, a
+-- migration script and a psql session, and app code is none of those.
+CREATE UNIQUE INDEX users_single_owner_idx ON users ((TRUE)) WHERE is_owner;
 
 -- SESSIONS (fastapi-users manages cookie tokens; this table is for audit too)
 CREATE TABLE access_tokens (

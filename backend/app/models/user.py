@@ -19,6 +19,10 @@ class User(Base):
     display_name: Mapped[str]
     hashed_pw: Mapped[str]
     role: Mapped[str] = mapped_column(server_default="member")
+    # The one account nobody can demote, deactivate or strip of approval —
+    # see routers/admin._guard_role_change. At most one row has it true,
+    # held by a partial unique index rather than by app code.
+    is_owner: Mapped[bool] = mapped_column(server_default=text("false"))
     can_approve: Mapped[bool] = mapped_column(server_default=text("false"))
     is_active: Mapped[bool] = mapped_column(server_default=text("true"))
     # Not in ARCHITECTURE.md §2.1's DDL, but PRD F1 requires it: a new user
