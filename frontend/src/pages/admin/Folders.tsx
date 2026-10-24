@@ -146,7 +146,7 @@ function FolderRow({
       onDragEnd={onDragEnd}
       onDrop={(e) => e.preventDefault()}
       className={cn(
-        "h-10 border-t border-border hover:bg-surface-hover",
+        "group h-10 border-t border-border hover:bg-surface-hover",
         dragging && "opacity-40",
       )}
     >

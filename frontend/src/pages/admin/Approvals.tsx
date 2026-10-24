@@ -237,7 +237,7 @@ export function Approvals() {
 
 function Row({ row, checked, onToggle }: { row: ApprovalItem; checked: boolean; onToggle: () => void }) {
   return (
-    <tr className="h-9 border-t border-border hover:bg-surface-hover">
+    <tr className="group h-9 border-t border-border hover:bg-surface-hover">
       <td className="px-4">
         <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Select ${row.item_label}`} />
       </td>

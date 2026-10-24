@@ -162,7 +162,7 @@ export function Archive() {
               </tr>
             )}
             {items?.map((item) => (
-              <tr key={item.id} className="h-10 border-t border-border hover:bg-surface-hover">
+              <tr key={item.id} className="group h-10 border-t border-border hover:bg-surface-hover">
                 <td className="px-4 text-table font-medium text-text-primary">{item.display_name}</td>
                 <td className="px-4 text-table text-text-secondary">{item.deal_name}</td>
                 <td className="px-4 text-table text-text-secondary">{item.folder_name}</td>
