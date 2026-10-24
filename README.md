@@ -180,3 +180,23 @@ network.
 | Login returns 400 with correct credentials | Five failed attempts in 15 minutes locked that email (PRD F1) | Wait it out, or use another account |
 | Pages load but every request 401s | The session cookie expired (12 hours) | Sign in again |
 | Uploads fail against storage | The s3mock container restarted and lost its bucket | Restart the API; it recreates the bucket at startup |
+
+## Going to production
+
+See **GUIDE.md** — the full path from here to a running deployment,
+written for someone who hasn't done it before.
+
+Two commands from it that do not exist anywhere else:
+
+```bash
+# Check real object storage behaves the way the app expects, BEFORE
+# deploying on top of it. Exits non-zero if not.
+python -m app.checks.storage_check
+
+# Create the first account on a fresh production database. Makes exactly
+# one admin/owner and refuses if any user already exists.
+python -m app.bootstrap
+```
+
+**Never run `python -m app.seed` in production.** It is the demo seed:
+three accounts, password `changeme123`, no forced password change.
