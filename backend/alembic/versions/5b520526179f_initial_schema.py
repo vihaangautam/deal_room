@@ -67,11 +67,40 @@ CREATE INDEX access_tokens_user_id_idx ON access_tokens(user_id);
 -- FOLDER TEMPLATES (global master list — not per-deal)
 CREATE TABLE folder_templates (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name          TEXT NOT NULL UNIQUE,
+    name          TEXT NOT NULL,
+    -- A root folder is the global template it always was: parent and deal
+    -- both NULL, and it appears in every deal. A subfolder hangs off one
+    -- and belongs to exactly one deal, so "March 2026" under Minutes in
+    -- Sharma is not a folder Patel ever sees. The CHECK is what keeps
+    -- those the only two shapes.
+    parent_id     UUID REFERENCES folder_templates(id),
+    deal_id       UUID,  -- FK added after deals exists, below
+    -- The root this subtree hangs off, denormalised so permission lookup
+    -- is one indexed join at any depth instead of walking the chain on
+    -- every file listing. NULL on a root, which is its own. Safe to carry
+    -- because nothing re-parents a folder: it is set once at creation and
+    -- a folder with subfolders cannot be deleted.
+    root_id       UUID REFERENCES folder_templates(id),
     display_order INTEGER NOT NULL DEFAULT 0,
     created_by    UUID NOT NULL REFERENCES users(id),
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT folder_templates_shape_check
+        CHECK ((parent_id IS NULL) = (deal_id IS NULL)
+               AND (parent_id IS NULL) = (root_id IS NULL))
 );
+
+-- Root names stay globally unique, as they were when UNIQUE sat on the
+-- column. A subfolder's name only has to be unique among its siblings
+-- *in its own deal* — Sharma and Patel both hang a "March 2026" off the
+-- same global Minutes row, so deal_id has to be in the key or the second
+-- deal is refused the name the first one took.
+CREATE UNIQUE INDEX folder_templates_root_name_uq
+    ON folder_templates (name) WHERE parent_id IS NULL;
+CREATE UNIQUE INDEX folder_templates_child_name_uq
+    ON folder_templates (deal_id, parent_id, name) WHERE parent_id IS NOT NULL;
+CREATE INDEX folder_templates_deal_idx ON folder_templates (deal_id);
+CREATE INDEX folder_templates_root_idx ON folder_templates (root_id);
+-- folder_templates is created before deals, so this one FK waits.
 
 -- USER FOLDER PERMISSIONS
 CREATE TABLE user_folder_permissions (
@@ -105,6 +134,10 @@ CREATE TABLE deals (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE folder_templates
+    ADD CONSTRAINT folder_templates_deal_fk
+    FOREIGN KEY (deal_id) REFERENCES deals(id) ON DELETE CASCADE;
 CREATE INDEX deals_stage_idx ON deals(stage);
 CREATE INDEX deals_created_at_idx ON deals(created_at DESC);
 

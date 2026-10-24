@@ -25,6 +25,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(deals.router)
 app.include_router(folders.router)
+app.include_router(folders.deal_router)
 app.include_router(upload.router)
 app.include_router(documents.router)
 app.include_router(tasks.router)

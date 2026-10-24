@@ -131,7 +131,20 @@ async def my_permissions(
             UserFolderPermission.user_id == user.id
         )
     )
-    return {str(folder_id): level for folder_id, level in rows}
+    levels = {str(folder_id): level for folder_id, level in rows}
+
+    # Subfolders have no rows of their own — they inherit the root of
+    # their tree (deps.permission_folder_id). Spelling that out here lets
+    # the sidebar keep reading one flat map by folder id, rather than
+    # every caller learning to resolve a root first.
+    subfolders = await db.execute(
+        select(FolderTemplate.id, FolderTemplate.root_id).where(
+            FolderTemplate.root_id.is_not(None)
+        )
+    )
+    for folder_id, root_id in subfolders:
+        levels[str(folder_id)] = levels.get(str(root_id), "none")
+    return levels
 
 
 @router.post("/change-password")

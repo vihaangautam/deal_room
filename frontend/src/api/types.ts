@@ -49,6 +49,14 @@ export interface DealStageHistoryItem {
 export interface Folder {
   id: string
   name: string
+  /** null on a root — the global folder shown in every deal. */
+  parent_id: string | null
+  /** The deal a subfolder belongs to; null on a root. */
+  deal_id: string | null
+  /** The root whose access level governs this folder. null on a root. */
+  root_id: string | null
+  /** How far in to indent it. 0 on a root. */
+  depth: number
   display_order: number
   /** Files across every deal, counting the statuses that block deletion. */
   file_count: number

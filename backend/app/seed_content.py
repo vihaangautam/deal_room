@@ -288,6 +288,35 @@ async def seed_content(db: AsyncSession) -> None:
     # The needs-attention task points at the KYC pack it has to replace.
     db.add(TaskAttachment(task_id=tasks[3].id, document_id=created[("SHRM", "KYC pack.pdf")].id))
 
+    # -------------------------------------------------------- subfolders
+    # PRD F4's per-deal subfolders, so the shipped demo shows the shape
+    # rather than four deals of flat folders. Dated names are the case
+    # they exist for: "March 2026" belongs to Sharma and would be
+    # meaningless sitting in Patel.
+    minutes = folders["Minutes of the meeting"]
+    sep_2025 = FolderTemplate(
+        name="September 2025",
+        parent_id=minutes.id,
+        deal_id=sharma.id,
+        root_id=minutes.id,
+        display_order=1,
+        created_by=samir.id,
+    )
+    db.add(sep_2025)
+    db.add(
+        FolderTemplate(
+            name="Credit committee",
+            parent_id=minutes.id,
+            deal_id=sharma.id,
+            root_id=minutes.id,
+            display_order=2,
+            created_by=samir.id,
+        )
+    )
+    await db.flush()
+    # and one file actually filed in one, so the folder isn't just a label
+    created[("SHRM", "Credit committee minutes 12 Sep.pdf")].folder_id = sep_2025.id
+
     # ----------------------------------------------------------- comments
     thread_root = Comment(
         deal_id=sharma.id,

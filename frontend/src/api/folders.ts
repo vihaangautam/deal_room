@@ -9,6 +9,32 @@ export function useFolders() {
   })
 }
 
+// The tree a single deal shows: every global root, plus that deal's own
+// subfolders, flattened in draw order with a depth to indent by. The deal
+// page used to read the global list, which by definition has no
+// subfolders in it.
+export function useDealFolders(dealId: string | undefined) {
+  return useQuery({
+    queryKey: ["folders", "deal", dealId],
+    queryFn: () => apiFetch<Folder[]>(`/deals/${dealId}/folders`),
+    enabled: !!dealId,
+  })
+}
+
+export function useCreateSubfolder(dealId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { name: string; parent_id: string }) =>
+      apiFetch<Folder>(`/deals/${dealId}/folders`, { method: "POST", body }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["folders"] })
+      // A subfolder inherits its root's level, so the viewer's access map
+      // has a new entry in it.
+      qc.invalidateQueries({ queryKey: ["my-permissions"] })
+    },
+  })
+}
+
 export function useCreateFolder() {
   const qc = useQueryClient()
   return useMutation({

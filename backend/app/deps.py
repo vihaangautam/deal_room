@@ -14,12 +14,12 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import current_active_user
 from app.models.deal import Deal
-from app.models.folder import UserFolderPermission
+from app.models.folder import FolderTemplate, UserFolderPermission
 from app.models.user import User
 
 
@@ -41,23 +41,58 @@ def require_admin(user: User = Depends(require_password_set)) -> User:
     return user
 
 
+async def permission_folder_id(db: AsyncSession, folder_id: UUID) -> UUID:
+    """The folder whose permission row governs this one.
+
+    Access is granted on roots — those are the columns in the admin's
+    matrix. A subfolder takes whatever the viewer has on the root of its
+    tree, at any depth, because folder_templates.root_id is stamped at
+    creation: the alternative is walking parent_id up the chain on every
+    file listing, which is a query per level for an answer that cannot
+    change.
+
+    Inheriting rather than granting per subfolder is also the safe
+    default. A subfolder nobody has configured yet resolves to its root,
+    so creating one inside Borrower details does not quietly publish it
+    to everyone; it is as locked as the folder it sits in.
+    """
+    root = await db.scalar(select(FolderTemplate.root_id).where(FolderTemplate.id == folder_id))
+    return root or folder_id
+
+
 async def check_folder_access(
     db: AsyncSession,
     user: User,
     folder_id: UUID,
     level: Literal["view", "contribute"],
+    deal_id: UUID | None = None,
 ) -> None:
     """ARCHITECTURE.md §2.2's resolution order: admin -> Contribute on
     every folder; otherwise the user_folder_permissions row; otherwise
     None (deny). Raises 403 — callers don't need to branch on the result,
-    just call this before touching the document/folder."""
+    just call this before touching the document/folder.
+
+    Pass deal_id wherever the folder came from the request body rather
+    than from a document row. A root folder is global and fits any deal,
+    but a subfolder belongs to one, and a Sharma subfolder id posted at
+    the Patel deal would otherwise file a Patel document under a folder
+    nobody looking at Patel can see. It lives here, in the call both
+    upload paths already make, rather than in each of them.
+    """
+    if deal_id is not None:
+        folder_deal = await db.scalar(
+            select(FolderTemplate.deal_id).where(FolderTemplate.id == folder_id)
+        )
+        if folder_deal is not None and folder_deal != deal_id:
+            raise HTTPException(status_code=404, detail="Folder not found")
+
     if user.role == "admin":
         return
 
     permission = await db.scalar(
         select(UserFolderPermission.access_level).where(
             UserFolderPermission.user_id == user.id,
-            UserFolderPermission.folder_id == folder_id,
+            UserFolderPermission.folder_id == await permission_folder_id(db, folder_id),
         )
     )
     if permission is None or permission == "none":
@@ -97,10 +132,23 @@ async def accessible_folder_ids(db: AsyncSession, user: User) -> list[UUID] | No
     documents.py's list both use this."""
     if user.role == "admin":
         return None
-    result = await db.scalars(
-        select(UserFolderPermission.folder_id).where(
+    granted = (
+        select(UserFolderPermission.folder_id)
+        .where(
             UserFolderPermission.user_id == user.id,
             UserFolderPermission.access_level != "none",
+        )
+        .scalar_subquery()
+    )
+    # The granted roots themselves, plus every subfolder hanging off one.
+    # Listing only the roots would hide every document filed in a
+    # subfolder from the people who can see the folder it is in.
+    result = await db.scalars(
+        select(FolderTemplate.id).where(
+            or_(
+                FolderTemplate.id.in_(granted),
+                FolderTemplate.root_id.in_(granted),
+            )
         )
     )
     return list(result)

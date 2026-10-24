@@ -82,7 +82,7 @@ async def init_upload(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_password_set),
 ) -> DocumentInitResponse:
-    await check_folder_access(db, user, body.folder_id, "contribute")
+    await check_folder_access(db, user, body.folder_id, "contribute", deal_id=deal_id)
 
     deal = await db.get(Deal, deal_id)
     if deal is None:

@@ -550,7 +550,7 @@ async def init_attachment_upload(
     know about tasks at all, only this init step does."""
     await _get_open_task(db, deal_id, task_id)
 
-    await check_folder_access(db, user, body.folder_id, "contribute")
+    await check_folder_access(db, user, body.folder_id, "contribute", deal_id=deal_id)
 
     ext = Path(body.filename).suffix.lower()
     if ext not in ALLOWED_MIME_EXTENSIONS:

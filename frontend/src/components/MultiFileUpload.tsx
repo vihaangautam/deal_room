@@ -4,7 +4,7 @@ import { Dialog } from "@/components/ui/dialog"
 import { UseALaptop } from "@/components/UseALaptop"
 import { Button } from "@/components/ui/button"
 import { useUpload, type UploadItem } from "@/hooks/useUpload"
-import { formatBytes } from "@/lib/utils"
+import { formatBytes, folderOptionLabel } from "@/lib/utils"
 import type { Folder } from "@/api/types"
 
 const STATUS_TEXT: Record<UploadItem["status"], (msg?: string) => string> = {
@@ -118,7 +118,7 @@ export function MultiFileUploadDialog({
           >
             {folders.map((f) => (
               <option key={f.id} value={f.id}>
-                {f.name}
+                {folderOptionLabel(f)}
               </option>
             ))}
           </select>

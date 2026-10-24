@@ -9,6 +9,13 @@ class FolderRead(BaseModel):
 
     id: uuid.UUID
     name: str
+    # None on a root — the global folder every deal shows. Set on a
+    # subfolder, which belongs to one deal and nests without limit.
+    parent_id: uuid.UUID | None = None
+    deal_id: uuid.UUID | None = None
+    # How far in to indent it, and which root's permission governs it.
+    depth: int = 0
+    root_id: uuid.UUID | None = None
     display_order: int
     # DESIGN.md §6.8's table columns. file_count is every status that
     # blocks deletion (PRD F4), so the number an admin reads is the same
@@ -23,6 +30,14 @@ class FolderCreate(BaseModel):
     # when creating a folder. New folders start from 'none' by default
     # so admin explicitly configures access per member in Users & permissions.
     default_access: str = Field(default="none", pattern="^(none|view)$")
+
+
+class SubfolderCreate(BaseModel):
+    """A folder inside another, on one deal. parent_id is any folder in
+    that deal's tree — a root, or another subfolder."""
+
+    name: str = Field(min_length=1, max_length=200)
+    parent_id: uuid.UUID
 
 
 class FolderUpdate(BaseModel):

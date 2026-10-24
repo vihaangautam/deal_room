@@ -101,11 +101,29 @@ Two roles (Admin and Member) plus one capability flag (`can_approve`). Rationale
 - Admin can create, rename, reorder and delete folders. Each change is a single row change that appears in every deal immediately.
 - Deletion is blocked while any document in any deal (status pending, active, delete_requested or archived) references the folder. Error lists counts per deal.
 - When creating a folder, the admin chooses the default access level for all current members (default: View).
-- No subfolders.
+
+**Subfolders.** A top-level folder is global, as above: one row, shown in
+every deal, and the only thing access is granted on. Inside one, the admin
+can create subfolders **on a single deal** — "March 2026" under Minutes of
+the meeting in Sharma Infra is not a folder Patel ever sees. Nesting is
+unlimited.
+
+- Access is never set on a subfolder. It is whatever the viewer has on the
+  top-level folder its tree hangs off, at any depth. So one created inside
+  Borrower details is born as locked as Borrower details, and the
+  permission matrix keeps one column per top-level folder rather than
+  growing a column per deal.
+- Two deals can each have their own subfolder of the same name under the
+  same parent. Names only have to be unique among siblings in one deal.
+- A folder can't be deleted while it has subfolders, on top of the
+  existing rule about documents.
+- Subfolders are admin-only to create, like every other folder change (§7).
 
 **Acceptance:**
 - After "Add folder: Valuation reports", every deal page lists it, including Old deals.
 - Deleting "Bank documents" while any file exists returns 409 with per-deal counts.
+- A member with Contribute on Minutes of the meeting can upload into a subfolder of it without any further grant; a member with None on Borrower details gets 403 on a subfolder of that.
+- Posting one deal's subfolder id as the upload target on another deal returns 404.
 
 ### F5. Documents
 

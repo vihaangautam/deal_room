@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { FileSpreadsheet, FileText, Lock, Upload } from "lucide-react"
+import { FileSpreadsheet, FileText, FolderPlus, Lock, Upload } from "lucide-react"
+import { ApiError } from "@/api/client"
 import { useDeal } from "@/api/deals"
 import {
   canOpenInBrowser,
@@ -10,7 +11,7 @@ import {
   useRenameDocument,
   useRequestDeleteDocument,
 } from "@/api/documents"
-import { useFolders } from "@/api/folders"
+import { useCreateSubfolder, useDealFolders } from "@/api/folders"
 import { useMyPermissions } from "@/api/permissions"
 import { useAuthStore } from "@/stores/auth"
 import { DealHeader } from "@/components/DealHeader"
@@ -18,13 +19,14 @@ import { UserName } from "@/components/UserName"
 import { PageBody } from "@/components/PageBody"
 import { DocumentStatusPill } from "@/components/StatusPill"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/toast"
 import { Dialog, DialogFooter } from "@/components/ui/dialog"
 import { RowMenu, RowMenuItem } from "@/components/ui/dropdown-menu"
 import { MultiFileUploadDialog } from "@/components/MultiFileUpload"
 import { StageChangeDialog } from "@/components/StageChangeDialog"
-import { cn, formatBytes, formatDate } from "@/lib/utils"
-import type { AccessLevel, DocumentItem } from "@/api/types"
+import { cn, folderOptionLabel, formatBytes, formatDate } from "@/lib/utils"
+import type { AccessLevel, DocumentItem, Folder as FolderItem } from "@/api/types"
 
 function FileIcon({ mimeType }: { mimeType: string }) {
   if (mimeType.includes("spreadsheet") || mimeType.includes("csv") || mimeType.includes("excel")) {
@@ -224,16 +226,90 @@ function FileRow({
   )
 }
 
+function NewSubfolderDialog({
+  dealId,
+  parent,
+  onClose,
+}: {
+  dealId: string
+  parent: FolderItem | null
+  onClose: () => void
+}) {
+  const create = useCreateSubfolder(dealId)
+  const [name, setName] = useState("")
+  const [error, setError] = useState<string | null>(null)
+
+  function close() {
+    setName("")
+    setError(null)
+    onClose()
+  }
+
+  return (
+    <Dialog
+      open={parent !== null}
+      onOpenChange={close}
+      title={parent ? "New folder inside " + parent.name : ""}
+      width={440}
+    >
+      {/* The two things an admin would otherwise find out by trying it:
+          this folder is not global, and it is not a new place to set
+          access. */}
+      <p className="text-body text-text-secondary">
+        Only on this deal. Anyone who can see{" "}
+        <span className="text-body-strong">{parent?.name}</span> can see it.
+      </p>
+      <form
+        className="mt-3"
+        onSubmit={async (e) => {
+          e.preventDefault()
+          if (!parent) return
+          setError(null)
+          try {
+            await create.mutateAsync({ name: name.trim(), parent_id: parent.id })
+            close()
+          } catch (err) {
+            setError(
+              err instanceof ApiError && typeof err.detail === "string"
+                ? err.detail
+                : "Couldn" + String.fromCharCode(39) + "t create that folder.",
+            )
+          }
+        }}
+      >
+        <Input
+          autoFocus
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="March 2026"
+          aria-label="Folder name"
+        />
+        {error && <p className="mt-2 text-body text-text-danger">{error}</p>}
+        <DialogFooter>
+          <Button type="button" variant="secondary" onClick={close}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={create.isPending} disabled={!name.trim()}>
+            Create folder
+          </Button>
+        </DialogFooter>
+      </form>
+    </Dialog>
+  )
+}
+
 export function DealDocuments() {
   const { dealId, folderId } = useParams<{ dealId: string; folderId?: string }>()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const { data: deal } = useDeal(dealId)
-  const { data: folders } = useFolders()
+  const { data: folders } = useDealFolders(dealId)
   const { data: documents, isLoading } = useDocuments(dealId)
   const { data: myPermissions } = useMyPermissions()
   const [uploadOpen, setUploadOpen] = useState(false)
   const [stageDialogOpen, setStageDialogOpen] = useState(false)
+  const [newFolderParent, setNewFolderParent] = useState<FolderItem | null>(null)
 
   const selectedFolderId = folderId ?? folders?.[0]?.id
 
@@ -295,7 +371,7 @@ export function DealDocuments() {
         >
           {folders?.map((folder) => (
             <option key={folder.id} value={folder.id}>
-              {folder.name} ({folderDocCounts.get(folder.id) ?? 0})
+              {folderOptionLabel(folder)} ({folderDocCounts.get(folder.id) ?? 0})
             </option>
           ))}
         </select>
@@ -312,15 +388,51 @@ export function DealDocuments() {
                 disabled={locked}
                 onClick={() => navigate(`/deals/${dealId}/documents/${folder.id}`)}
                 title={locked ? "You don't have access to this folder. Ask Samir." : undefined}
+                // Nesting is unlimited, so the indent is capped: past four
+                // levels the names have no room left, and a folder whose
+                // name you cannot read is not a folder.
+                style={{ paddingLeft: 12 + Math.min(folder.depth, 4) * 14 }}
                 className={cn(
-                  "flex h-9 w-full items-center gap-2 border-b border-border px-3 text-left last:border-b-0",
+                  "group/row flex h-9 w-full items-center gap-2 border-b border-border pr-2 text-left last:border-b-0",
                   active ? "bg-brand-50 text-brand-700" : "text-text-primary hover:bg-surface-hover",
                   locked && "cursor-not-allowed",
                 )}
               >
-                <span className={cn("flex-1 truncate text-body-strong", locked && "text-text-tertiary")}>
+                <span
+                  className={cn(
+                    "flex-1 truncate",
+                    // A root is the structure every deal shares; a
+                    // subfolder is this deal's own filing inside it, and
+                    // reading lighter is how the eye tells them apart
+                    // down a long list.
+                    folder.depth === 0 ? "text-body-strong" : "text-body",
+                    locked && "text-text-tertiary",
+                  )}
+                >
                   {folder.name}
                 </span>
+                {user?.role === "admin" && !locked && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label={"New folder inside " + folder.name}
+                    title={"New folder inside " + folder.name}
+                    onClick={(e) => {
+                      e.stopPropagation() // not a folder switch
+                      setNewFolderParent(folder)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        setNewFolderParent(folder)
+                      }
+                    }}
+                    className="shrink-0 rounded p-0.5 text-text-tertiary opacity-0 hover:bg-surface-hover hover:text-text-primary focus:opacity-100 group-hover/row:opacity-100"
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" aria-hidden />
+                  </span>
+                )}
                 {locked ? (
                   <Lock className="h-4 w-4 shrink-0 text-text-tertiary" aria-hidden />
                 ) : (
@@ -406,6 +518,11 @@ export function DealDocuments() {
       )}
 
       <StageChangeDialog open={stageDialogOpen} onOpenChange={setStageDialogOpen} deal={deal} />
+      <NewSubfolderDialog
+        dealId={dealId}
+        parent={newFolderParent}
+        onClose={() => setNewFolderParent(null)}
+      />
       </PageBody>
     </>
   )

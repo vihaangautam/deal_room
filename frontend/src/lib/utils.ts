@@ -61,3 +61,11 @@ export function avatarColor(userId: string): string {
   }
   return AVATAR_TINTS[hash % AVATAR_TINTS.length] ?? "#EEF0EE"
 }
+
+// A <select> can't indent its options with padding, so nesting has to be
+// in the text. Used by both folder pickers — the upload dialog's and the
+// narrow-screen one that stands in for the sidebar below 1024.
+export function folderOptionLabel(folder: { name: string; depth: number }): string {
+  if (folder.depth === 0) return folder.name
+  return "\u00a0\u00a0".repeat(folder.depth) + "\u2514 " + folder.name
+}
