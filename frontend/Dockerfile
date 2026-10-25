@@ -35,4 +35,10 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD wget -q --spider http://localhost:8080/index.html || exit 1
+    # 127.0.0.1, not localhost. nginx's `listen 8080;` binds IPv4 only,
+    # while wget resolves localhost to ::1 first and gets "connection
+    # refused" — so the container reported unhealthy from the moment it
+    # started while serving every request perfectly. A health signal that
+    # is always red tells you nothing when something is actually wrong,
+    # and anything waiting on service_healthy would wait forever.
+    CMD wget -q --spider http://127.0.0.1:8080/index.html || exit 1
