@@ -14,6 +14,7 @@ const PHRASE: Record<string, string> = {
   "deal.stage_changed": "changed the stage",
   "document.uploaded": "uploaded",
   "document.renamed": "renamed",
+  "document.moved": "moved",
   "document.archived": "moved to the Archive",
   "document.delete_requested": "requested deletion of",
   "document.restored": "restored",
@@ -46,11 +47,37 @@ export function describeActivity(item: AuditLogItem): string {
   const [noun, verb] = [item.action.split(".")[0] ?? "", item.action.split(".")[1] ?? item.action]
   const phrase = PHRASE[item.action] ?? `${verb.replace(/_/g, " ")} the ${noun}`
 
-  const parts: string[] = [phrase]
+  let parts: string[] = []
 
-  if (typeof d.to === "string") parts.push(`to '${d.to}'`)
-  else if (typeof d.title === "string") parts.push(`'${d.title}'`)
-  else if (typeof d.name === "string") parts.push(`'${d.name}'`)
+  if (item.action === "document.archived") {
+    if (typeof d.name === "string" && d.name) {
+      parts = [`moved '${d.name}' to the Archive`]
+    } else {
+      parts = ["moved to the Archive"]
+    }
+  } else if (item.action === "document.moved") {
+    const docName = typeof d.name === "string" && d.name ? `'${d.name}'` : "the document"
+    if (typeof d.from_folder === "string" && typeof d.to_folder === "string") {
+      parts = [`moved ${docName} from ${d.from_folder} to ${d.to_folder}`]
+    } else if (typeof d.to_folder === "string") {
+      parts = [`moved ${docName} to ${d.to_folder}`]
+    } else {
+      parts = [`moved ${docName}`]
+    }
+  } else if (item.action === "document.renamed") {
+    if (typeof d.from === "string" && typeof d.to === "string") {
+      parts = [`renamed '${d.from}' to '${d.to}'`]
+    } else if (typeof d.to === "string") {
+      parts = [`renamed to '${d.to}'`]
+    } else {
+      parts = ["renamed the document"]
+    }
+  } else {
+    parts = [phrase]
+    if (typeof d.to === "string") parts.push(`to '${d.to}'`)
+    else if (typeof d.title === "string") parts.push(`'${d.title}'`)
+    else if (typeof d.name === "string") parts.push(`'${d.name}'`)
+  }
 
   if (item.action === "deal.stage_changed" && typeof d.to_stage === "string") {
     parts.push(`from ${d.from_stage} to ${d.to_stage}`)
@@ -62,6 +89,7 @@ export function describeActivity(item: AuditLogItem): string {
 
   return parts.join(" ")
 }
+
 
 export function ActivityFeed({
   items,

@@ -401,6 +401,7 @@ async def restore_document(
             action="document.restored",
             entity_type="document",
             entity_id=str(doc.id),
+            detail={"name": doc.display_name},
             ip_address=request.client.host if request.client else None,
         )
     )
@@ -435,6 +436,7 @@ async def purge_document(
             action="document.purged",
             entity_type="document",
             entity_id=str(doc.id),
+            detail={"name": doc.display_name},
             ip_address=request.client.host if request.client else None,
         )
     )

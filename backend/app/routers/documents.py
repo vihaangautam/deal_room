@@ -16,9 +16,16 @@ from app.deps import (
 from app.models.approval import ApprovalRequest
 from app.models.audit import AuditLog
 from app.models.document import Document
+from app.models.folder import FolderTemplate
 from app.models.user import User
-from app.schemas.document import DeleteRequestBody, DocumentRead, RenameRequest
+from app.schemas.document import (
+    DeleteRequestBody,
+    DocumentRead,
+    MoveDocumentRequest,
+    RenameRequest,
+)
 from app.storage import INLINE_VIEWABLE_TYPES, presigned_download_url
+
 
 router = APIRouter(prefix="/deals/{deal_id}/documents", tags=["documents"])
 
@@ -205,7 +212,7 @@ async def request_delete(
                 action="document.archived",
                 entity_type="document",
                 entity_id=str(doc.id),
-                detail={"reason": body.reason, "direct": True},
+                detail={"reason": body.reason, "direct": True, "name": doc.display_name},
                 ip_address=ip,
             )
         )
@@ -237,9 +244,77 @@ async def request_delete(
             action="document.delete_requested",
             entity_type="document",
             entity_id=str(doc.id),
-            detail={"reason": body.reason},
+            detail={"reason": body.reason, "name": doc.display_name},
             ip_address=ip,
         )
     )
     await db.commit()
     return {"status": "delete_requested"}
+
+
+@router.patch("/{doc_id}/move", response_model=DocumentRead)
+async def move_document(
+    deal_id: uuid.UUID,
+    doc_id: uuid.UUID,
+    body: MoveDocumentRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_password_set),
+) -> DocumentRead:
+    doc = await db.get(Document, doc_id)
+    if doc is None or doc.deal_id != deal_id:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if doc.status != "active":
+        raise HTTPException(status_code=409, detail="Only active documents can be moved")
+
+    await require_open_deal(db, deal_id)  # PRD F3
+
+    if doc.folder_id == body.folder_id:
+        raise HTTPException(status_code=422, detail="Document is already in this folder")
+
+    # Source folder access check (PRD §7: need contribute access)
+    await check_folder_access(db, user, doc.folder_id, "contribute", deal_id=deal_id)
+
+    # Destination folder must exist, belong to this deal or global, and user must have contribute access
+    target_folder = await db.get(FolderTemplate, body.folder_id)
+    if target_folder is None:
+        raise HTTPException(status_code=404, detail="Destination folder not found")
+    if target_folder.deal_id is not None and target_folder.deal_id != deal_id:
+        raise HTTPException(status_code=404, detail="Destination folder not found")
+
+    await check_folder_access(db, user, target_folder.id, "contribute", deal_id=deal_id)
+
+    source_folder = await db.get(FolderTemplate, doc.folder_id)
+    from_name = source_folder.name if source_folder else "Unknown"
+    to_name = target_folder.name
+
+    doc.folder_id = target_folder.id
+
+    db.add(
+        AuditLog(
+            actor_id=user.id,
+            action="document.moved",
+            entity_type="document",
+            entity_id=str(doc.id),
+            detail={
+                "name": doc.display_name,
+                "from_folder": from_name,
+                "to_folder": to_name,
+            },
+            ip_address=request.client.host if request.client else None,
+        )
+    )
+    await db.commit()
+    await db.refresh(doc)
+    uploader = await db.get(User, doc.uploaded_by)
+    return DocumentRead(
+        id=doc.id,
+        folder_id=doc.folder_id,
+        display_name=doc.display_name,
+        size_bytes=doc.size_bytes,
+        mime_type=doc.mime_type,
+        status=doc.status,
+        uploaded_by_name=uploader.display_name if uploader else "",
+        created_at=doc.created_at,
+    )
+

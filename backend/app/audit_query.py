@@ -70,6 +70,7 @@ def audit_query(
             # The deal this row belongs to, whichever way it is reachable.
             func.coalesce(DealDirect.id, DealOfDocument.id, DealOfTask.id),
             func.coalesce(DealDirect.name, DealOfDocument.name, DealOfTask.name),
+            Document.display_name,
         )
         .outerjoin(User, User.id == AuditLog.actor_id)
         .outerjoin(
@@ -131,11 +132,15 @@ def audit_query(
     return query
 
 
-def to_audit_item(log: AuditLog, actor_name, deal_id, deal_name):
+def to_audit_item(log: AuditLog, actor_name, deal_id, deal_name, doc_name=None):
     """audit_query returns tuples; this is the one place that knows their
     shape. Imported lazily to keep app.schemas out of this module's import
     cycle with the routers."""
     from app.schemas.admin import AuditLogItem
+
+    detail = dict(log.detail or {})
+    if log.entity_type == "document" and doc_name and "name" not in detail:
+        detail["name"] = doc_name
 
     return AuditLogItem(
         id=log.id,
@@ -144,8 +149,9 @@ def to_audit_item(log: AuditLog, actor_name, deal_id, deal_name):
         action=log.action,
         entity_type=log.entity_type,
         entity_id=log.entity_id,
-        detail=log.detail,
+        detail=detail if detail else log.detail,
         deal_id=deal_id,
         deal_name=deal_name,
         created_at=log.created_at,
     )
+

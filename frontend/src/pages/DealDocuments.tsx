@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { FileSpreadsheet, FileText, FolderPlus, Lock, Upload } from "lucide-react"
 import { ApiError } from "@/api/client"
@@ -8,9 +8,11 @@ import {
   documentDownloadUrl,
   documentViewUrl,
   useDocuments,
+  useMoveDocument,
   useRenameDocument,
   useRequestDeleteDocument,
 } from "@/api/documents"
+
 import { useCreateSubfolder, useDealFolders } from "@/api/folders"
 import { useMyPermissions } from "@/api/permissions"
 import { useAuthStore } from "@/stores/auth"
@@ -73,21 +75,133 @@ function DeleteRequestDialog({
   )
 }
 
+function MoveDocumentDialog({
+  open,
+  onOpenChange,
+  doc,
+  folders,
+  currentFolderId,
+  permissions,
+  onConfirm,
+  pending,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  doc: DocumentItem | null
+  folders: FolderItem[]
+  currentFolderId: string
+  permissions?: Record<string, AccessLevel> | undefined
+  onConfirm: (targetFolderId: string) => void
+  pending: boolean
+}) {
+  const eligibleFolders = useMemo(() => {
+    return folders.filter((f) => {
+      if (f.id === currentFolderId) return false
+      if (permissions && permissions[f.id] !== "contribute") return false
+      return true
+    })
+  }, [folders, currentFolderId, permissions])
+
+  const [selectedFolderId, setSelectedFolderId] = useState<string>("")
+
+  useEffect(() => {
+    if (open) {
+      setSelectedFolderId(eligibleFolders[0]?.id ?? "")
+    }
+  }, [open, eligibleFolders])
+
+  if (!doc) return null
+
+  const currentFolder = folders.find((f) => f.id === currentFolderId)
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!pending) onOpenChange(v)
+      }}
+      title={`Move '${doc.display_name}'`}
+      width={460}
+    >
+      <p className="text-body text-text-secondary">
+        Move this document to another folder in this deal.
+      </p>
+
+      <div className="mt-4 flex flex-col gap-3">
+        <div>
+          <span className="text-meta font-medium text-text-tertiary">Current location</span>
+          <div className="mt-1 flex items-center gap-2 rounded-md border border-border bg-surface-sunken px-3 py-2 text-table text-text-secondary">
+            <span className="font-medium text-text-primary">{currentFolder?.name ?? "Current folder"}</span>
+          </div>
+        </div>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-body-strong text-text-primary">Destination folder</span>
+          {eligibleFolders.length === 0 ? (
+            <p className="rounded-md border border-border bg-surface-sunken p-2.5 text-meta text-text-tertiary">
+              No other folders with write access are available in this deal.
+            </p>
+          ) : (
+            <select
+              value={selectedFolderId}
+              onChange={(e) => setSelectedFolderId(e.target.value)}
+              className="h-9 rounded-md border border-border bg-surface px-2.5 text-body text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-600"
+            >
+              {folders.map((folder) => {
+                const isCurrent = folder.id === currentFolderId
+                const canContribute = !permissions || permissions[folder.id] === "contribute"
+                return (
+                  <option
+                    key={folder.id}
+                    value={folder.id}
+                    disabled={isCurrent || !canContribute}
+                  >
+                    {folderOptionLabel(folder)} {isCurrent ? "(current)" : !canContribute ? "(no access)" : ""}
+                  </option>
+                )
+              })}
+            </select>
+          )}
+        </label>
+      </div>
+
+      <DialogFooter>
+        <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={pending}>
+          Cancel
+        </Button>
+        <Button
+          loading={pending}
+          disabled={!selectedFolderId || selectedFolderId === currentFolderId}
+          onClick={() => onConfirm(selectedFolderId)}
+        >
+          Move document
+        </Button>
+      </DialogFooter>
+    </Dialog>
+  )
+}
+
 function FileRow({
   doc,
   dealId,
   access,
   dealClosed,
+  folders,
+  myPermissions,
 }: {
   doc: DocumentItem
   dealId: string
   access: AccessLevel
   dealClosed: boolean
+  folders: FolderItem[]
+  myPermissions?: Record<string, AccessLevel> | undefined
 }) {
   const user = useAuthStore((s) => s.user)
   const rename = useRenameDocument(dealId)
+  const moveDocument = useMoveDocument(dealId)
   const requestDelete = useRequestDeleteDocument(dealId)
   const [renaming, setRenaming] = useState(false)
+  const [moveOpen, setMoveOpen] = useState(false)
   const [baseName, setBaseName] = useState(() => doc.display_name.replace(/\.[^.]+$/, ""))
   const [deleteOpen, setDeleteOpen] = useState(false)
   const ext = doc.display_name.slice(doc.display_name.lastIndexOf("."))
@@ -193,12 +307,47 @@ function FileRow({
               Download
             </RowMenuItem>
             <RowMenuItem onSelect={() => setRenaming(true)}>Rename</RowMenuItem>
+            <RowMenuItem onSelect={() => setMoveOpen(true)}>Move</RowMenuItem>
             <RowMenuItem danger onSelect={() => setDeleteOpen(true)}>
               Request deletion
             </RowMenuItem>
           </RowMenu>
         )}
       </td>
+
+      <MoveDocumentDialog
+        open={moveOpen}
+        onOpenChange={setMoveOpen}
+        doc={doc}
+        folders={folders}
+        currentFolderId={doc.folder_id}
+        permissions={myPermissions}
+        pending={moveDocument.isPending}
+        onConfirm={(targetFolderId) => {
+          const originalFolderId = doc.folder_id
+          const targetFolder = folders.find((f) => f.id === targetFolderId)
+          moveDocument.mutate(
+            { docId: doc.id, folderId: targetFolderId },
+            {
+              onSuccess: () => {
+                setMoveOpen(false)
+                toast(`Moved '${doc.display_name}' to ${targetFolder?.name ?? "new folder"}.`, {
+                  undo: () => {
+                    moveDocument.mutate({ docId: doc.id, folderId: originalFolderId })
+                  },
+                })
+              },
+              onError: (err) => {
+                const msg =
+                  err instanceof ApiError && typeof err.detail === "string"
+                    ? err.detail
+                    : "Couldn't move document."
+                toast(msg, { tone: "warning" })
+              },
+            },
+          )
+        }}
+      />
 
       <DeleteRequestDialog
         open={deleteOpen}
@@ -225,6 +374,7 @@ function FileRow({
     </tr>
   )
 }
+
 
 function NewSubfolderDialog({
   dealId,
@@ -498,8 +648,11 @@ export function DealDocuments() {
                     dealId={dealId}
                     access={selectedAccess}
                     dealClosed={dealClosed}
+                    folders={folders ?? []}
+                    myPermissions={myPermissions}
                   />
                 ))}
+
               </tbody>
             </table>
           )}

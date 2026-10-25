@@ -22,6 +22,24 @@ export function useRenameDocument(dealId: string) {
   })
 }
 
+export function useMoveDocument(dealId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ docId, folderId }: { docId: string; folderId: string }) =>
+      apiFetch<DocumentItem>(`/deals/${dealId}/documents/${docId}/move`, {
+        method: "PATCH",
+        body: { folder_id: folderId },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["documents", dealId] })
+      qc.invalidateQueries({ queryKey: ["folders"] })
+      qc.invalidateQueries({ queryKey: ["deal-activity", dealId] })
+      qc.invalidateQueries({ queryKey: ["audit-log"] })
+    },
+  })
+}
+
+
 export function useRequestDeleteDocument(dealId: string) {
   const qc = useQueryClient()
   return useMutation({

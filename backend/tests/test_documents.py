@@ -252,3 +252,83 @@ async def test_pdfs_can_open_in_the_browser_but_other_types_cannot(
     # a .docx cannot be displayed, so inline is ignored for it
     resp = await client.get(f"{base}/{docx.id}/download?inline=true", follow_redirects=False)
     assert "response-content-disposition=attachment" in resp.headers["location"].lower()
+
+
+async def test_move_document_success_and_audit_log(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    admin = await create_user(db, "admin@lilkis.in", role="admin")
+    deal = await create_deal(db, "MOVD", admin.id)
+    folder1 = await create_folder(db, "Folder A", admin.id)
+    folder2 = await create_folder(db, "Folder B", admin.id)
+    await login(client, "admin@lilkis.in")
+
+    doc = await _seed_document(db, deal, folder1, admin, "contract.pdf", "application/pdf")
+
+    # Move doc from folder1 to folder2
+    resp = await client.patch(
+        f"/deals/{deal.id}/documents/{doc.id}/move",
+        json={"folder_id": str(folder2.id)},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["folder_id"] == str(folder2.id)
+
+    # Check audit log in deal activity
+    act_resp = await client.get(f"/deals/{deal.id}/activity")
+    assert act_resp.status_code == 200
+    activities = act_resp.json()
+    move_act = next((a for a in activities if a["action"] == "document.moved"), None)
+    assert move_act is not None
+    assert move_act["detail"]["name"] == "contract.pdf"
+    assert move_act["detail"]["from_folder"] == "Folder A"
+    assert move_act["detail"]["to_folder"] == "Folder B"
+
+
+async def test_move_document_rejects_same_folder(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    admin = await create_user(db, "admin@lilkis.in", role="admin")
+    deal = await create_deal(db, "SAME", admin.id)
+    folder1 = await create_folder(db, "Folder A", admin.id)
+    await login(client, "admin@lilkis.in")
+
+    doc = await _seed_document(db, deal, folder1, admin, "contract.pdf", "application/pdf")
+
+    resp = await client.patch(
+        f"/deals/{deal.id}/documents/{doc.id}/move",
+        json={"folder_id": str(folder1.id)},
+    )
+    assert resp.status_code == 422
+    assert "already in this folder" in resp.json()["detail"].lower()
+
+
+async def test_archive_document_audit_log_includes_name(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    admin = await create_user(db, "admin@lilkis.in", role="admin")
+    deal = await create_deal(db, "ARCH", admin.id)
+    folder1 = await create_folder(db, "Folder A", admin.id)
+    await login(client, "admin@lilkis.in")
+
+    doc = await _seed_document(db, deal, folder1, admin, "secret_notes.pdf", "application/pdf")
+
+    # Admin delete moves directly to archive
+    resp = await client.request(
+        "DELETE",
+        f"/deals/{deal.id}/documents/{doc.id}",
+        json={"reason": "cleanup test"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "archived"
+
+    # Activity log should show document.archived with name
+    act_resp = await client.get(f"/deals/{deal.id}/activity")
+    assert act_resp.status_code == 200
+    activities = act_resp.json()
+    arch_act = next((a for a in activities if a["action"] == "document.archived"), None)
+    assert arch_act is not None
+    assert arch_act["detail"]["name"] == "secret_notes.pdf"
+    assert arch_act["detail"]["reason"] == "cleanup test"
+
+

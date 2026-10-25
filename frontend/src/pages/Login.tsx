@@ -64,14 +64,14 @@ export function Login() {
 
         <h1 className="mb-6 text-title-page text-text-primary">Sign in</h1>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} autoComplete="off" className="flex flex-col gap-4">
           {error && <p className="text-body text-text-danger">{error}</p>}
 
           <Field label="Email" htmlFor="email">
             <Input
               id="email"
               type="email"
-              autoComplete="username"
+              autoComplete="off"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}

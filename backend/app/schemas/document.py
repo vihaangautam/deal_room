@@ -47,3 +47,8 @@ class RenameRequest(BaseModel):
 
 class DeleteRequestBody(BaseModel):
     reason: str | None = None
+
+
+class MoveDocumentRequest(BaseModel):
+    folder_id: uuid.UUID
+

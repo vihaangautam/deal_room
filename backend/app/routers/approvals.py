@@ -177,6 +177,20 @@ async def _apply_decision(
         deal_id, item_name = doc.deal_id, doc.display_name
         linked = await _linked_task_ids(db, doc.id)
         task_id = linked[0] if linked else None
+        if action == "approve":
+            db.add(
+                AuditLog(
+                    actor_id=reviewer.id,
+                    action="document.archived",
+                    entity_type="document",
+                    entity_id=str(doc.id),
+                    detail={
+                        "reason": approval.requester_note or note,
+                        "name": doc.display_name,
+                        "direct": False,
+                    },
+                )
+            )
 
     elif approval.type == "task_reassign":
         task = await db.get(Task, approval.task_id)
@@ -214,9 +228,10 @@ async def _apply_decision(
             action=f"approval.{approval.status}",
             entity_type="approval_request",
             entity_id=str(approval.id),
-            detail={"type": approval.type, "note": note},
+            detail={"type": approval.type, "note": note, "name": item_name},
         )
     )
+
 
 
 @router.get("", response_model=list[ApprovalItem])
