@@ -135,3 +135,25 @@ async def test_the_database_allows_only_one_owner(db: AsyncSession) -> None:
     with pytest.raises(IntegrityError):
         await db.commit()
     await db.rollback()
+
+
+async def test_an_admin_cannot_reset_the_owners_password(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    """The side door in the owner rules.
+
+    Blocking role, is_active and can_approve on the owner is worth
+    nothing if another admin can reset his password, read the temporary
+    one off the response, and sign in as him — which is the account that
+    makes and unmakes admins.
+    """
+    samir, _, _ = await _cast(db)
+    await login(client, "deputy@lilkis.in")
+
+    blocked = await client.post(f"/admin/users/{samir.id}/reset-password")
+    assert blocked.status_code == 403, blocked.text
+
+    # and the deputy can still reset an ordinary member's, which is the
+    # part of the job that should keep working
+    member = await create_user(db, "someone@lilkis.in")
+    assert (await client.post(f"/admin/users/{member.id}/reset-password")).status_code == 200

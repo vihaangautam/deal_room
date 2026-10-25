@@ -229,6 +229,23 @@ async def reset_password(
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
+    if user.is_owner and user.id != admin.id:
+        # The side door in the owner rules. _guard_access_change stops
+        # anyone changing the owner's role, status or approval rights —
+        # and then this endpoint let any admin reset the owner's password,
+        # read the temporary one off the screen, and sign in as him. Every
+        # protection on the account was worth nothing while one API call
+        # handed over the account itself.
+        #
+        # It does mean nobody can rescue a locked-out owner from the UI:
+        # that is ops/reset-owner-password.sh, which needs a shell on the
+        # server, which is the right bar for taking over the account that
+        # owns everything.
+        raise HTTPException(
+            status_code=403,
+            detail="The owner's password can only be reset by the owner.",
+        )
+
     temp_password = _generate_temp_password()
     user.hashed_pw = PasswordHelper().hash(temp_password)
     user.must_change_password = True

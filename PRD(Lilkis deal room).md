@@ -219,6 +219,11 @@ belongs to. The owner is always an admin, and:
   managing users stays open to all admins, per §7.
 - Nobody can change the owner's role, active status or `can_approve` — not
   another admin, and not the owner himself, so there is no path to it at all.
+- Nobody but the owner can reset the owner's password. Otherwise the rules
+  above are worth nothing: an admin resets it, reads the temporary password
+  off the response, and signs in as the account that makes admins. A locked-out
+  owner is recovered with `ops/reset-owner-password.sh`, which needs a shell on
+  the server.
 - Nobody can change their own role or status either, which also stops an admin
   deactivating their own account by accident.
 
