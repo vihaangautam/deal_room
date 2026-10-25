@@ -101,6 +101,8 @@ services:
         VITE_API_URL: "/api"
     container_name: lilkis-web
     restart: unless-stopped
+    ports:
+      - "80:8080"
     depends_on:
       - api
     networks:
@@ -111,10 +113,12 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: lilkis-tunnel
     restart: unless-stopped
+    profiles:
+      - tunnel
     # Point the tunnel's public hostname at http://web:8080 in the
     # Cloudflare dashboard — not at the API. Everything reaches the API
     # through nginx, which is what keeps it same-origin.
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
       - web
     networks:
