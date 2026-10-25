@@ -1,5 +1,20 @@
 # Taking the Lilkis Deal Room live
 
+> **Status, 25 Oct 2026.** Deployed to **AWS Mumbai**, not OCI — EC2 at
+> `13.126.222.201`, S3 bucket `lilkis-deal-vault` with versioning and the
+> split app/purge keys. Phases 1, 2 and 4 below still describe the OCI
+> route and are kept for reference; the AWS equivalents were done
+> directly. **Phases 3, 5, 6, 6b, 7 and 8 all still apply as written.**
+>
+> Outstanding, in order:
+> 1. **Rotate every credential** — the keys, database passwords, SECRET_KEY
+>    and Samir's first password were pasted into a chat transcript on
+>    25 Oct and must be treated as public.
+> 2. **Phase 6** — HTTPS. Until it is done, *nobody can sign in*: the
+>    session cookie is `Secure` and browsers discard it over plain HTTP.
+> 3. **Phase 6b** — close port 80.
+> 4. **Phase 7** — backups and the restore drill. Nothing is backed up yet.
+
 A step-by-step path from "it runs on my laptop" to "Samir uses it at
 work". Written on the assumption you have not done this before.
 
@@ -89,9 +104,17 @@ Phases 2 and 7 are what turn 1 into a fact rather than an intention.
 
 ---
 
-## Phase 1. Create the Oracle account
+## Phase 1. The Oracle account
 
-**Time:** 20 minutes, plus up to a few hours for verification.
+**Time:** 5 minutes if the account exists; 20 minutes plus verification
+if not.
+
+**You already have an account**, so skip to *Then upgrade to Pay As You
+Go* below. The signup steps are kept only in case you ever start again
+from nothing.
+
+<details>
+<summary>Creating an account from scratch</summary>
 
 1. Go to <https://signup.cloud.oracle.com>.
 2. Choose your country as **India**, and give a real email you control.
@@ -110,6 +133,8 @@ Phases 2 and 7 are what turn 1 into a fact rather than an intention.
 **Check:** you can sign in at <https://cloud.oracle.com> and see the
 console.
 
+</details>
+
 ### Then upgrade to Pay As You Go
 
 Per Phase 0. Do this now, while you remember.
@@ -122,10 +147,11 @@ Per Phase 0. Do this now, while you remember.
 **Check:** the orange "Free Trial — N days left" banner at the top of the
 console is gone.
 
-> If you would rather test on the trial first and upgrade later, that is
-> survivable **as long as you upgrade before the 30 days are up**. Put a
-> reminder in your calendar for day 20. If the trial lapses with more
-> than 20 GB stored, the objects go.
+> **Decided, 24 Oct 2026:** Vihaan is upgrading to Pay As You Go. The
+> deletion clause is the one risk in this whole document that cannot be
+> undone afterwards, and a near-zero bill is the right price for closing
+> it. Nothing else in this guide depends on which way this went — it just
+> stops being a question.
 
 ---
 
@@ -447,119 +473,240 @@ sign-in.
 
 ---
 
-## Phase 6. The domain and the tunnel
+## Phase 6. HTTPS — without this, nobody can sign in
 
-**Time:** 30 minutes. Needs a domain you control.
+**Time:** 30 minutes, plus DNS propagation. **Needs a domain.**
 
-The tunnel is how the internet reaches the VM. It dials **out** from the
-server to Cloudflare, so the VM needs no open inbound ports at all — no
-port 80, no port 443, nothing to scan or attack. It also terminates
-HTTPS for you, so there are no certificates to manage or renew.
+### Why this is not optional
 
-1. At <https://dash.cloudflare.com>, add the domain (`lilkis.in`) and
-   follow the nameserver instructions at your registrar. Propagation
-   takes anywhere from minutes to a few hours.
-2. **Zero Trust → Networks → Tunnels → Create a tunnel**:
-   - **Cloudflared**, name it `lilkis-prod`
-   - On the next screen, **copy the token** — the long string in the
-     install command. That is `CLOUDFLARE_TUNNEL_TOKEN`. You do not need
-     to run their install command; the compose file runs cloudflared for
-     you.
-3. **Public hostname**:
-   - **Subdomain:** `deals` → **Domain:** `lilkis.in`
-   - **Service type:** HTTP
-   - **URL:** `web:8080`
+The session cookie is set `Secure`:
 
-   > `web`, not `api`. `web` is the nginx container that serves the site
-   > and proxies `/api` through to the backend. Pointing the tunnel at
-   > the API serves no frontend at all and breaks the same-origin cookie.
+```
+set-cookie: lilkis_session=...; HttpOnly; SameSite=strict; Secure
+```
 
-4. Put the token in `.env`, then `docker compose -f
-   docker-compose.prod.yml up -d`.
+A browser will only store and return a `Secure` cookie over HTTPS. Served
+over plain `http://`, Chrome accepts the login response, silently throws
+the cookie away, and the very next request is unauthenticated. Tested
+against the live server on 25 Oct 2026:
 
-**Check:** `https://deals.lilkis.in` shows the sign-in page, with a
-padlock.
+```
+POST /api/auth/login     -> 204       the server is happy
+document.cookie          -> (none)    Chrome refused to store it
+GET  /api/auth/me        -> 401       so nobody is signed in
+```
+
+`curl` does not enforce `Secure`, which is why a health check and an API
+smoke test both pass while the actual site is unusable. **HTTPS is what
+makes the application work at all**, not a hardening step to do later.
+
+There is no practical way to get a trusted certificate for a bare IP
+address, so this needs a domain name. That is the one prerequisite.
+
+### 6.1 A domain
+
+Ideally `lilkis.in`, or whatever Samir's firm already owns — it belongs
+with the firm, like their email domain. If that will take weeks, any
+cheap domain works for now and can be changed later; it is about ₹800 a
+year and the tunnel does not care which one it is.
+
+Either way the domain's nameservers have to point at Cloudflare:
+
+1. <https://dash.cloudflare.com> → **Add a site** → enter the domain →
+   **Free** plan.
+2. Cloudflare shows you two nameservers. Set those at your registrar
+   (GoDaddy, Namecheap, BigRock — wherever it was bought), replacing
+   what is there.
+3. Wait. Minutes usually, up to a few hours. Cloudflare emails when the
+   site is Active.
+
+### 6.2 Create the tunnel
+
+1. **Zero Trust** (left sidebar) → **Networks → Tunnels** → **Create a
+   tunnel**.
+2. Choose **Cloudflared**, name it `lilkis-prod`, **Save**.
+3. The next screen offers install commands for various systems. **Ignore
+   all of them** — the compose file already runs cloudflared. You only
+   want the **token**: the long string after `--token` in the command
+   shown. Copy that.
+
+   > It is a credential. Treat it like a password: it lets anything
+   > holding it publish traffic for that hostname.
+
+4. **Next**, then **Public Hostname**:
+
+   | Field | Value |
+   |---|---|
+   | Subdomain | `deals` |
+   | Domain | your domain |
+   | Path | *(leave empty)* |
+   | Type | `HTTP` |
+   | URL | `web:8080` |
+
+   > `web:8080`, not `api:8000` and not an IP. `web` is the nginx
+   > container, reachable from cloudflared over the compose network. It
+   > serves the site and proxies `/api` to the backend, which is what
+   > keeps everything same-origin so the cookie works. Pointing the
+   > tunnel at the API serves no frontend at all.
+
+5. **Save tunnel.**
+
+### 6.3 Point the app at the new address
+
+On the server:
+
+```bash
+cd /opt/lilkis
+git pull
+nano .env
+```
+
+Two lines change:
+
+```
+PUBLIC_ORIGIN=https://deals.yourdomain.in     # was http://13.126.222.201
+CLOUDFLARE_TUNNEL_TOKEN=<the token from 6.2>
+```
+
+`PUBLIC_ORIGIN` must be the `https://` address with no trailing slash. It
+is what the API allows as an origin; leave it as the old IP and the
+browser's requests get rejected.
+
+Then:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml logs --tail 20 cloudflared
+```
+
+The log should say `Registered tunnel connection` a few times. The
+Cloudflare dashboard should show the tunnel as **Healthy**.
+
+> `git pull` matters here: it removes the published port 80 and takes
+> cloudflared out of the optional profile it was put in during the first
+> deploy. Without it the tunnel container will not start on its own.
+
+### 6.4 Check that sign-in actually works
+
+Not with curl. **In a browser**, because the whole bug was browser-only:
+
+1. Open `https://deals.yourdomain.in` — padlock in the address bar.
+2. Sign in as Samir.
+3. You should land on the Deals page and **stay there** on a refresh.
+
+If it bounces back to the login screen, the cookie is still being
+rejected: check the address really is `https`, and that `PUBLIC_ORIGIN`
+matches it exactly.
+
+---
+
+## Phase 6b. Close port 80
+
+Only once Phase 6 works end to end.
+
+The first deploy published port 80 and opened the security group to the
+world so the site could be reached on its IP. The tunnel dials **out**,
+so none of that is needed any more — and leaving it means the app stays
+reachable over plain HTTP, cookie bug and all, by anyone who knows the
+address.
+
+1. **AWS Console → EC2 → Instances → `lilkis-prod` → Security tab →**
+   click the security group.
+2. **Inbound rules → Edit inbound rules.**
+3. **Delete** the rule allowing HTTP / port 80 from `0.0.0.0/0`.
+4. Keep **SSH (22)** — but narrow its source from `0.0.0.0/0` to **My
+   IP** while you are there. That is how you still get in.
+5. **Save rules.**
+
+**Check:** `curl -m 10 http://13.126.222.201` now times out, and
+`https://deals.yourdomain.in` still works.
+
+That pair of results is the whole point: nothing reachable except through
+Cloudflare, over TLS.
 
 ---
 
 ## Phase 7. Backups — the phase that protects your job
 
 **Nothing before this point protects you from losing data.** Everything
-so far has one copy of the documents, in one Oracle account.
+so far leaves one copy of the documents, in one AWS account.
 
-Two things need backing up, and they are different:
+The scripts are written and in the repository under `ops/`. **`ops/README.md`
+has the install steps** — this phase is why each one exists.
+
+Two different things need protecting, and they fail in different ways:
 
 | | Where it lives | What loses it |
 |---|---|---|
-| **The database** | Postgres on the VM | VM reclaimed, disk failure, a bad migration |
-| **The documents** | OCI bucket | Account problem, a mistaken purge |
+| **The database** | Postgres on the VM | VM lost, disk failure, a bad migration |
+| **The documents** | S3 bucket | Account compromised, a mistaken purge |
 
-### 7.1 Database backup, nightly
+The database is small — it holds no files, only who everyone is, which
+deal each document belongs to, the permissions, the tasks and the audit
+log. But without it the bucket is a pile of UUIDs that mean nothing.
 
-```bash
-mkdir -p /opt/lilkis/ops
-nano /opt/lilkis/ops/backup.sh
-```
+### 7.1 `ops/backup.sh` — nightly
 
-I will write this script for you — ask and I will add it to the repo
-rather than have you type it from a guide. It will:
+Dumps, compresses, encrypts with a passphrase, uploads to a separate
+bucket, prunes past 30 days, and **reads the object back** to confirm it
+is really there at the right size. Every step is checked, because a
+backup job that fails quietly is worse than none at all: it also removes
+the worry that would have made someone look.
 
-- `pg_dump` the database
-- encrypt it with a passphrase
-- upload it to a **separate bucket**, `lilkis-backups`
-- keep 30 days and delete older ones
-- exit non-zero loudly if any step fails
+Pruning only happens after a verified upload, so a run that fails early
+never deletes the older backup that is currently the good one.
 
-Then schedule it:
+> Give it its own IAM user (`BACKUP_ACCESS_KEY_ID`). Without one it falls
+> back to the purge key, which can also delete the live documents — so a
+> single stolen credential would reach both the originals and the copies.
+> It warns when it does this.
 
-```bash
-sudo nano /etc/systemd/system/lilkis-backup.service
-sudo nano /etc/systemd/system/lilkis-backup.timer
-sudo systemctl enable --now lilkis-backup.timer
-```
+### 7.2 `ops/sync-documents.sh` — weekly, to a different provider
 
-### 7.2 Document backup, to a different provider
+**This is the row in the table that account-level trouble cannot touch.**
 
-This is the one that matters. A copy of the documents inside the same
-Oracle account does not protect you from the account being the problem.
+Versioning and the no-delete policy both protect against things going
+wrong *inside* the bucket. Neither protects against the bucket, the
+account, or the root credentials being the problem. A second bucket in
+the same AWS account covers a mistake, not an account.
 
-Use `rclone` on the VM to sync the bucket to a second provider —
-Cloudflare R2 is the natural fit since you already have a Cloudflare
-account for the tunnel, its free tier is 10 GB with no egress charges and
-no expiry, and it speaks the same S3 API. Backblaze B2 works equally
-well.
+Point `DOCS_MIRROR_ENDPOINT` at Cloudflare R2 — you already have a
+Cloudflare account for the tunnel, the free tier is 10 GB with no egress
+charges, and it speaks the same S3 API. Backblaze B2 works equally well.
 
-Weekly is enough, given documents are only ever added.
+It syncs, never mirrors: nothing in it deletes from the destination. If a
+document vanishes from the primary for any reason, including one nobody
+intended, the copy is still there.
 
-### 7.3 The restore drill — do it before go-live, not after
+### 7.3 The restore drill — before go-live, not after
 
-A backup you have never restored is not a backup. It is a file that you
-hope is a backup.
-
-Once, before the first real document goes in:
-
-1. Take a backup.
-2. Destroy the database: `docker compose -f docker-compose.prod.yml down -v`
-3. Restore from the backup.
-4. Confirm you can sign in and the deals are there.
-
-Write down how long it took. That number is your honest answer when
-Samir asks what happens if something breaks.
-
-> PRD §12 lists "restore drill" in Phase 2. This is it. It is listed as
-> a deliverable because an untested backup is a very common way to find
-> out, far too late, that you had no backup.
-
-### 7.4 Schedule the purge job
+A backup you have never restored is a file you *hope* is a backup.
+`ops/restore.sh` exists so the real thing is a command you have already
+run rather than a procedure you are inventing while frightened.
 
 ```bash
-sudo nano /etc/systemd/system/lilkis-purge.service   # ExecStart runs app.jobs.purge
-sudo nano /etc/systemd/system/lilkis-purge.timer     # daily
-sudo systemctl enable --now lilkis-purge.timer
+/opt/lilkis/ops/backup.sh
+/opt/lilkis/ops/restore.sh                      # lists what is there
+/opt/lilkis/ops/restore.sh lilkis_2026...gpg    # puts it back
 ```
 
-Run it with `--dry-run` first and read the report. It is the only thing
-in the system that deletes objects.
+It downloads and decrypts **before** touching the running database, so a
+wrong passphrase or a corrupt object is found while the live system is
+still intact. Then it asks you to type the database name, because the
+one way it can make things worse is being run by accident.
+
+Afterwards: **sign in through the browser and open a deal.** Row counts
+prove the load ran; only signing in proves the restore worked.
+
+Write down how long it took, start to finish. That number is your answer
+when Samir asks what happens if something breaks.
+
+### 7.4 The purge sweep
+
+`lilkis-purge.timer`, daily at 04:00 IST — after the backup, so anything
+it removes was captured in that night's dump first. It is the only thing
+in the system that deletes objects. Run it once with `--dry-run` and read
+the report before enabling the timer.
 
 ---
 

@@ -1,0 +1,17 @@
+[Unit]
+Description=Lilkis Deal Room - nightly database backup
+# Nothing to dump if the stack is not up.
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/lilkis/ops/backup.sh
+User=ubuntu
+# The script reads /opt/lilkis/.env itself; nothing is passed in here,
+# so the unit file never contains a credential.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

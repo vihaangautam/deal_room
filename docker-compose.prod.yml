@@ -101,8 +101,16 @@ services:
         VITE_API_URL: "/api"
     container_name: lilkis-web
     restart: unless-stopped
-    ports:
-      - "80:8080"
+    # No published port, deliberately. Publishing 80 puts the site on a
+    # bare IP over plain HTTP, and the session cookie is Secure — which
+    # browsers refuse to store over HTTP, so every login succeeds and
+    # then nothing is signed in. It also means documents cross the
+    # internet unencrypted and the VM needs an inbound rule to the world.
+    # The tunnel below reaches this container over the internal network
+    # instead, and dials out, so nothing has to be open at all.
+    #
+    # To debug without the tunnel, add `-p 8080:8080` on a one-off
+    # `docker compose run`, rather than publishing it here for good.
     depends_on:
       - api
     networks:
@@ -113,12 +121,17 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: lilkis-tunnel
     restart: unless-stopped
-    profiles:
-      - tunnel
     # Point the tunnel's public hostname at http://web:8080 in the
     # Cloudflare dashboard — not at the API. Everything reaches the API
     # through nginx, which is what keeps it same-origin.
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    #
+    # Not behind a `profiles:` key: with one, forgetting --profile tunnel
+    # brings the stack up with no way in and no error, which is a quiet
+    # failure on the one service that makes the site reachable. The `:?`
+    # makes a missing token loud instead.
+    command: >
+      tunnel --no-autoupdate run
+        --token ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN - see GUIDE.md Phase 6}
     depends_on:
       - web
     networks:

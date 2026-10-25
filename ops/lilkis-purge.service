@@ -1,0 +1,19 @@
+[Unit]
+Description=Lilkis Deal Room - retention purge sweep
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/lilkis
+# The only thing in the system that deletes objects. It removes stale
+# uploads, rejected files past their window, and archived files past the
+# retention setting - which is "Keep forever" unless an admin changed it,
+# in which case this sweep does nothing to archived files at all.
+ExecStart=/usr/bin/docker compose -f /opt/lilkis/docker-compose.prod.yml exec -T api python -m app.jobs.purge
+User=ubuntu
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Weekly off-provider copy of the documents
+
+[Timer]
+# Sunday 03:30 IST (22:00 UTC Saturday). Documents are only ever added,
+# so weekly is enough; the nightly database backup is the one that has
+# to keep up with activity.
+OnCalendar=Sat *-*-* 22:00:00 UTC
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Lilkis purge sweep daily
+
+[Timer]
+# 04:00 IST, well after the backup - so anything it removes was captured
+# in that night's dump first.
+OnCalendar=*-*-* 22:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Lilkis Deal Room - copy documents to the second provider
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/lilkis/ops/sync-documents.sh
+User=ubuntu
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

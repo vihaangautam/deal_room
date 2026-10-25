@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Lilkis database backup nightly
+
+[Timer]
+# 02:30 IST. The server runs UTC, so 21:00 the previous day.
+OnCalendar=*-*-* 21:00:00 UTC
+# A backup skipped because the VM was off is still a backup owed.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
