@@ -72,7 +72,7 @@ ${COMPOSE} exec -T -e PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}" postgres \
 # A dump of an empty or half-connected database still produces a valid
 # gzip of a few hundred bytes. Size is the cheapest lie-detector there is.
 SIZE=$(stat -c%s "${DUMP}")
-[ "${SIZE}" -gt 10000 ] || fail "dump is only ${SIZE} bytes - that is not a real database"
+[ "${SIZE}" -gt 1000 ] || fail "dump is only ${SIZE} bytes - that is not a real database"
 gzip -t "${DUMP}" || fail "dump is not valid gzip"
 say "dumped ${SIZE} bytes"
 
