@@ -50,3 +50,24 @@ async def test_bootstrap_refuses_once_anyone_exists(
         await create_owner(db)
 
     assert len((await db.scalars(select(User))).all()) == 1
+
+
+async def test_bootstrap_creates_the_standard_folders(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PRD F4's folders only existed in app.seed, which must never run in
+    production. So the first real deployment came up with none at all:
+    sign in, make a deal, and there is nowhere to put a document."""
+    from app.models.folder import FolderTemplate
+    from app.seed import FOLDER_NAMES
+
+    monkeypatch.setenv("LILKIS_BOOTSTRAP_NAME", "Samir Biyani")
+    monkeypatch.setenv("LILKIS_BOOTSTRAP_EMAIL", "samir@lilkis.in")
+    monkeypatch.setenv("LILKIS_BOOTSTRAP_PASSWORD", "a-real-one-not-changeme")
+
+    await create_owner(db)
+
+    folders = (await db.scalars(select(FolderTemplate).order_by(FolderTemplate.display_order))).all()
+    assert [f.name for f in folders] == FOLDER_NAMES
+    # Roots, so the permission matrix has a column for each.
+    assert all(f.parent_id is None and f.deal_id is None for f in folders)

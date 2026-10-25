@@ -29,7 +29,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session_factory
+from app.models.folder import FolderTemplate
 from app.models.user import User
+
+# The one list, so production and the demo seed cannot drift apart on
+# what Lilkis's folders are called.
+from app.seed import FOLDER_NAMES
 
 MIN_PASSWORD = 10  # matches ChangePasswordRequest in schemas/user.py
 
@@ -92,20 +97,38 @@ async def create_owner(db: AsyncSession) -> None:
 
     password = _ask_password()
 
-    db.add(
-        User(
-            email=email,
-            display_name=display_name,
-            hashed_pw=PasswordHelper().hash(password),
-            role="admin",
-            is_owner=True,
-            can_approve=True,
-            # PRD F1. Unlike the demo seed, which skips this so the demo
-            # isn't gated behind a password screen, a real first admin
-            # changes the password you just read out to them.
-            must_change_password=True,
-        )
+    owner = User(
+        email=email,
+        display_name=display_name,
+        hashed_pw=PasswordHelper().hash(password),
+        role="admin",
+        is_owner=True,
+        can_approve=True,
+        # PRD F1. Unlike the demo seed, which skips this so the demo
+        # isn't gated behind a password screen, a real first admin
+        # changes the password you just read out to them.
+        must_change_password=True,
     )
+    db.add(owner)
+    await db.flush()
+
+    # PRD F4's global folders — Lilkis's actual filing structure, from the
+    # PRD and the mockups, not demo content. They only existed in app.seed,
+    # which must never run in production because it also creates three
+    # accounts with a known password. So the first production deployment
+    # came up with no folders at all: sign in, make a deal, and there is
+    # nowhere to put a document.
+    #
+    # No permission rows. Admin bypasses that table, and there are no
+    # members yet — the first one gets their access set when they are
+    # added, which is deny-by-default until someone chooses otherwise.
+    existing_folders = await db.scalar(select(func.count(FolderTemplate.id)))
+    if not existing_folders:
+        db.add_all(
+            FolderTemplate(name=name, display_order=i, created_by=owner.id)
+            for i, name in enumerate(FOLDER_NAMES)
+        )
+
     await db.commit()
 
     print(f"\nCreated {display_name} <{email}>.")
