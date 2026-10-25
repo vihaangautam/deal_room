@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     oci_admin_access_key_id: str
     oci_admin_secret_access_key: str
 
+    aws_region: str = "ap-south-1"
+
     environment: str = "development"
 
     frontend_origin: str = "http://localhost:5173"

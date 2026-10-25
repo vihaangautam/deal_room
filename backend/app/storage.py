@@ -18,7 +18,7 @@ from botocore.exceptions import ClientError
 
 from app.config import settings
 
-_client_config = Config(s3={"addressing_style": "path"})
+_client_config = Config(signature_version="s3v4", s3={"addressing_style": "path"})
 
 
 def _strip_expect_header(request, **kwargs) -> None:
@@ -38,6 +38,7 @@ def _make_client(access_key: str, secret_key: str):
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         config=_client_config,
+        region_name=getattr(settings, "aws_region", "ap-south-1"),
     )
     if settings.environment != "production":
         client.meta.events.register("before-send.s3.PutObject", _strip_expect_header)
