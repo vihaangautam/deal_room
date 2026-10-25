@@ -1,0 +1,8 @@
+# These run on the server. A shell script checked out with CRLF has a
+# carriage return on the end of its shebang, and Linux reports that as
+# "bad interpreter: No such file or directory" — which names neither the
+# line endings nor the file, and costs an hour the first time.
+*.sh            text eol=lf
+*.service       text eol=lf
+*.timer         text eol=lf
+db-init/*.sql   text eol=lf
