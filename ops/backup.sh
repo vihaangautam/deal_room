@@ -22,6 +22,9 @@ set -euo pipefail
 LILKIS_DIR="${LILKIS_DIR:-/opt/lilkis}"
 COMPOSE="docker compose -f ${LILKIS_DIR}/docker-compose.prod.yml"
 KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
+# The schema's table count. Bump it when a migration adds a table; a
+# dump with fewer than this did not finish.
+EXPECT_TABLES="${BACKUP_EXPECT_TABLES:-13}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 WORK="$(mktemp -d)"
 DUMP="${WORK}/lilkis_${STAMP}.sql.gz"
@@ -70,11 +73,16 @@ ${COMPOSE} exec -T -e PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}" postgres \
     || fail "pg_dump"
 
 # A dump of an empty or half-connected database still produces a valid
-# gzip of a few hundred bytes. Size is the cheapest lie-detector there is.
-SIZE=$(stat -c%s "${DUMP}")
-[ "${SIZE}" -gt 1000 ] || fail "dump is only ${SIZE} bytes - that is not a real database"
+# gzip. Check what is IN it, not how big it is: a freshly deployed room
+# with two users and no documents dumps to a couple of KB, while a year
+# of real use dumps to megabytes, so no single size threshold is right
+# for both. A truncated dump, which is the failure worth catching, is
+# missing tables at any size.
 gzip -t "${DUMP}" || fail "dump is not valid gzip"
-say "dumped ${SIZE} bytes"
+TABLES=$(gunzip -c "${DUMP}" | grep -c '^CREATE TABLE' || true)
+[ "${TABLES}" -ge "${EXPECT_TABLES}" ]     || fail "dump has ${TABLES} CREATE TABLE statements, expected ${EXPECT_TABLES} - it is truncated"
+SIZE=$(stat -c%s "${DUMP}")
+say "dumped ${SIZE} bytes, ${TABLES} tables"
 
 # ── Encrypt ──────────────────────────────────────────────────────────
 # It holds every email address, the whole audit trail and the permission
