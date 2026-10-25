@@ -6,14 +6,9 @@
 > route and are kept for reference; the AWS equivalents were done
 > directly. **Phases 3, 5, 6, 6b, 7 and 8 all still apply as written.**
 >
-> Outstanding, in order:
-> 1. **Rotate every credential** — the keys, database passwords, SECRET_KEY
->    and Samir's first password were pasted into a chat transcript on
->    25 Oct and must be treated as public.
-> 2. **Phase 6** — HTTPS. Until it is done, *nobody can sign in*: the
->    session cookie is `Secure` and browsers discard it over plain HTTP.
-> 3. **Phase 6b** — close port 80.
-> 4. **Phase 7** — backups and the restore drill. Nothing is backed up yet.
+> **Handing over to Samir for real use — see "Handover night" below.**
+> That section is the ordered list for tonight; the phases it refers to
+> have the detail.
 
 A step-by-step path from "it runs on my laptop" to "Samir uses it at
 work". Written on the assumption you have not done this before.
@@ -707,6 +702,165 @@ when Samir asks what happens if something breaks.
 it removes was captured in that night's dump first. It is the only thing
 in the system that deletes objects. Run it once with `--dry-run` and read
 the report before enabling the timer.
+
+---
+
+## Handover night — the runbook
+
+**Goal:** by the end of tonight, Samir has one URL and one password, and
+from that moment he can use the deal room for real work — adding real
+documents — without you needing to touch anything for him to carry on.
+
+That last clause is what sets the list below. Real documents means the
+data has to survive the night going wrong, so backups are part of tonight
+rather than part of next week.
+
+**About 2.5 hours.** Do them in this order; each one depends on the one
+before.
+
+---
+
+### 1. Rotate the AWS keys — 15 min
+
+Both pairs were pasted into a chat transcript and must be treated as
+public. These are the only exposed credentials that are usable by anyone,
+from anywhere — the database passwords are behind the VM with no
+published port, and the session secret turns out not to sign sessions at
+all (fastapi-users is on DatabaseStrategy, so tokens are random rows in
+`access_tokens`).
+
+1. **AWS Console → IAM → Users → `lilkis-app` → Security credentials →
+   Create access key.** Copy both halves.
+2. Same for **`lilkis-purge`**.
+3. On the server, put all four values into `/opt/lilkis/.env`.
+4. Restart and check:
+
+```bash
+cd /opt/lilkis
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml exec api python -m app.checks.storage_check
+```
+
+**Check:** `5 passed, 0 failed`. This is the first time the no-delete
+check can pass — it cannot pass against the local S3Mock, which has no
+permissions model. Green here means the policy is real.
+
+5. Back in IAM, **delete** the old keys. Delete, not deactivate.
+
+---
+
+### 2. HTTPS — 30 min
+
+Phase 6 above, in full. Until this is done nobody can sign in at all:
+the session cookie is `Secure` and browsers discard it over plain HTTP.
+
+Short version once the tunnel exists in the Cloudflare dashboard:
+
+```bash
+cd /opt/lilkis
+git pull                       # removes port 80, un-hides cloudflared
+nano .env                      # CLOUDFLARE_TUNNEL_TOKEN + PUBLIC_ORIGIN
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml logs --tail 20 cloudflared
+```
+
+`PUBLIC_ORIGIN` must be the exact `https://` address, no trailing slash.
+
+**Check:** open the site in a browser, sign in, **refresh**. Staying
+signed in through a refresh is the test. curl cannot tell you this.
+
+---
+
+### 3. Close port 80 — 5 min
+
+Phase 6b above. **Check:** `curl -m 10 http://13.126.222.201` times out
+while the HTTPS address still works.
+
+---
+
+### 4. Backups — 45 min
+
+Now mandatory, because real documents.
+
+```bash
+sudo apt update && sudo apt install -y awscli gnupg
+```
+
+Create the backup bucket in S3 (`lilkis-deal-backups`, versioning on),
+then add to `.env` the block in `ops/README.md`. Generate the passphrase
+on the server and **store it somewhere that is not this server** — a
+password manager, or on paper. It is the only thing that opens the
+backups, and if its only copy is on the machine they exist to recover,
+they are decoration.
+
+```bash
+/opt/lilkis/ops/backup.sh
+sudo cp /opt/lilkis/ops/*.service /opt/lilkis/ops/*.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now lilkis-backup.timer lilkis-purge.timer
+systemctl list-timers 'lilkis-*'
+```
+
+---
+
+### 5. The restore drill — 15 min, before Samir gets the link
+
+Not after. This is the one chance to do it on a system where nothing is
+lost if it goes wrong, and a backup nobody has restored is a file you
+hope is a backup.
+
+```bash
+/opt/lilkis/ops/restore.sh                     # list
+/opt/lilkis/ops/restore.sh lilkis_2026...gpg   # put it back
+```
+
+Then sign in through the browser and open a deal. **Write down how long
+the whole thing took** — that is your answer when Samir asks what happens
+if something breaks.
+
+---
+
+### 6. Samir's account — 5 min
+
+The bootstrap password is in a transcript, so it cannot be the one he
+keeps. It is already set to force a change at first sign-in, so the
+simplest safe path is: **make sure Samir is the first person to log in**,
+and that he changes it immediately.
+
+Send the URL and the password through different channels if you can —
+the link by email, the password by phone or WhatsApp.
+
+**Check:** sign in as Samir yourself once, confirm the change-password
+screen appears, then *do not* complete it. Leave that for him.
+
+---
+
+### 7. Final pass — 15 min
+
+Walk it as Samir would, on the real URL:
+
+- [ ] Sign in, refresh, still signed in
+- [ ] Upload a document to a folder, approve it
+- [ ] Open the PDF — it should open in a tab
+- [ ] Add a user, set folder access, sign in as them in a private window
+- [ ] Delete something and recover it from the Archive
+- [ ] Check the Activity tab shows all of it
+
+Anything broken here is better found now than by Samir at 9am.
+
+---
+
+### Not tonight, and that is fine
+
+- **Document copy to a second provider** (`sync-documents.sh`). The
+  bucket has versioning and the app's key cannot delete, so documents are
+  well protected against everything except losing the AWS account itself.
+  Worth doing this week; not worth delaying handover for.
+- **Rotating the database passwords and SECRET_KEY.** Only reachable from
+  inside the VM.
+- **Moving to a Lilkis domain and a Lilkis-owned AWS account.** Both
+  should happen before this stops being a pilot. Raise them with Samir
+  now so they are his decisions, not surprises later.
 
 ---
 
