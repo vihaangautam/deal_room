@@ -10,6 +10,8 @@ a systemd unit or a crontab.
 | `restore.sh` | Put a backup back | By hand |
 | `sync-documents.sh` | Copy every document to a second provider | Weekly, Sun 03:30 IST |
 | `lilkis-purge.*` | The retention sweep (`app.jobs.purge`) | Daily, 04:00 IST |
+| `reset-owner-password.sh` | New temporary password for the owner | When locked out or exposed |
+| `reset-for-handover.sh` | Wipe test data and hand over a clean room | **Once, before handover** |
 
 The purge runs *after* the backup, so anything it removes was captured in
 that night's dump first.
@@ -72,6 +74,25 @@ Run the first backup by hand rather than waiting for 02:30:
 ```bash
 /opt/lilkis/ops/backup.sh
 ```
+
+---
+
+## Handing over a clean room
+
+After testing properly — uploads, approvals, deletions, permissions —
+and **before** the client puts anything real in:
+
+```bash
+/opt/lilkis/ops/reset-for-handover.sh
+```
+
+It takes a backup, empties the documents bucket including every version,
+rebuilds the database from the migration, and re-creates the owner.
+
+**Before handover, never after.** There is no way to remove your test
+uploads and keep someone else's real ones, so running it later destroys
+their work. It asks for the bucket name and then the word DESTROY, which
+is two more chances to notice than freehand `aws s3 rm` gives you.
 
 ---
 
