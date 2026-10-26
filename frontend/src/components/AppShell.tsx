@@ -81,6 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data: myTasks } = useMyTasks()
   const { data: approvals } = useApprovals()
   const isAdmin = user?.role === "admin"
+  const canApprove = isAdmin || !!user?.can_approve
 
   async function handleLogout() {
     try {
@@ -160,6 +161,25 @@ export function AppShell({ children }: { children: ReactNode }) {
               active={location.pathname === "/my-tasks"}
             />
           </div>
+
+          {/* PRD §7 gives approving to anyone with can_approve, whatever
+              their role — so this sits above the Admin block rather than
+              inside it. It was inside, which meant Samir could grant
+              someone approval rights and they had no way to reach the
+              queue those rights are for. */}
+          {canApprove && !isAdmin && (
+            <div className="mt-6 flex flex-col gap-1">
+              <NavRow
+                to="/admin/approvals"
+                icon={ShieldCheck}
+                label="Approvals"
+                count={approvals?.length}
+                isApprovalBadge
+                onNavigate={() => setNavOpen(false)}
+                active={location.pathname === "/admin/approvals"}
+              />
+            </div>
+          )}
 
           {isAdmin && (
             <div className="mt-6">

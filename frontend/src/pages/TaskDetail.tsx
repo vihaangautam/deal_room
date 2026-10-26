@@ -19,7 +19,7 @@ import { useFolders } from "@/api/folders"
 import { useMyPermissions } from "@/api/permissions"
 import { useUsers } from "@/api/users"
 import { useAuthStore } from "@/stores/auth"
-import { TaskStatusPill, NeedsAttentionPill, DocumentStatusPill } from "@/components/StatusPill"
+import { NeedsAttentionPill, DocumentStatusPill } from "@/components/StatusPill"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import { MultiFileUploadDialog } from "@/components/MultiFileUpload"
@@ -128,7 +128,24 @@ export function TaskDetail() {
   return (
     <div className="mx-auto flex max-w-content flex-col-reverse gap-5 px-6 py-6 md:flex-row">
       <div className="min-w-0 flex-1 xl:min-w-[560px]">
-        <p className="mb-1 text-meta text-text-tertiary">{task.key}</p>
+        {/* DESIGN.md §4.3 gives every other page a breadcrumb; this one
+            had the key as plain text, so arriving from My Tasks left no
+            way back to the deal but the browser's back button. */}
+        <p className="mb-1 text-meta text-text-tertiary">
+          <Link to="/deals" className="hover:underline">
+            Deals
+          </Link>
+          {" / "}
+          <Link to={`/deals/${dealId}/documents`} className="hover:underline">
+            {deal?.name ?? "Deal"}
+          </Link>
+          {" / "}
+          <Link to={`/deals/${dealId}/tasks`} className="hover:underline">
+            Tasks
+          </Link>
+          {" / "}
+          {task.key}
+        </p>
         <h1 className="mb-4 text-title-task text-text-primary">{task.title}</h1>
 
         {canActOnTask && (
@@ -259,14 +276,15 @@ export function TaskDetail() {
             Done
           </option>
         </select>
-        <div className="mb-3">
-          <TaskStatusPill status={task.status} />
-          {task.needs_attention && (
-            <span className="ml-1.5">
-              <NeedsAttentionPill />
-            </span>
-          )}
-        </div>
+        {/* No status pill here: the select above already shows the
+            status, and the two sat one under the other saying the same
+            words. needs_attention is the one thing the select cannot
+            carry, so it stays. */}
+        {task.needs_attention && (
+          <div className="mb-3">
+            <NeedsAttentionPill />
+          </div>
+        )}
 
         {/* DESIGN.md §5.7: "Moves to Done when Samir approves 2 pending
             files." PRD G3 keeps approving in one queue — "the sponsor

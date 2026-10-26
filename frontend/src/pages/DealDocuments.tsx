@@ -51,11 +51,27 @@ function DeleteRequestDialog({
   pending: boolean
 }) {
   const [reason, setReason] = useState("")
+  // PRD §7: "Request deletion | Admin: Deletes directly to Archive". So
+  // for an admin there is no request and no reviewer — the file is in the
+  // Archive the moment they confirm. Telling Samir that Samir will review
+  // Samir's deletion was both wrong and faintly absurd.
+  const isAdmin = useAuthStore((s) => s.user?.role) === "admin"
   if (!doc) return null
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title={`Request deletion of '${doc.display_name}'?`} width={440}>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        isAdmin
+          ? `Move '${doc.display_name}' to the Archive?`
+          : `Request deletion of '${doc.display_name}'?`
+      }
+      width={440}
+    >
       <p className="text-body text-text-secondary">
-        Samir will review this. If approved, the file moves to the Archive and stops appearing here.
+        {isAdmin
+          ? "It goes to the Archive straight away and stops appearing here. You can restore it from Admin \u2192 Archive."
+          : "Samir will review this. If approved, the file moves to the Archive and stops appearing here."}
       </p>
       <textarea
         value={reason}
@@ -68,7 +84,7 @@ function DeleteRequestDialog({
           Cancel
         </Button>
         <Button loading={pending} onClick={() => onConfirm(reason)}>
-          Request deletion
+          {isAdmin ? "Move to Archive" : "Request deletion"}
         </Button>
       </DialogFooter>
     </Dialog>
