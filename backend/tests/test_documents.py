@@ -332,3 +332,85 @@ async def test_archive_document_audit_log_includes_name(
     assert arch_act["detail"]["reason"] == "cleanup test"
 
 
+
+
+async def test_move_needs_contribute_on_both_folders(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    """The access control the move endpoint already gets right, pinned.
+
+    Moving a document is the one operation that changes who can see a file
+    without changing the file: a folder has its own access level, so
+    re-filing a bank statement into Miscellaneous shows it to everyone
+    with View there. The endpoint requires contribute on the source AND
+    the destination, and the shipped tests covered neither — they checked
+    the happy path and the audit row, so a refactor could drop either
+    check and stay green.
+    """
+    admin = await create_user(db, "admin@lilkis.in", role="admin")
+    meera = await create_user(db, "meera@lilkis.in")
+    deal = await create_deal(db, "MOVE", admin.id)
+    bank = await create_folder(db, "Bank documents", admin.id)
+    misc = await create_folder(db, "Miscellaneous", admin.id)
+    legal = await create_folder(db, "Legal documents", admin.id)
+
+    # Contribute on bank and misc; nothing at all on legal.
+    await grant_access(db, meera.id, bank.id, "contribute", admin.id)
+    await grant_access(db, meera.id, misc.id, "contribute", admin.id)
+
+    doc = await _seed_document(db, deal, bank, admin, "statement.pdf", "application/pdf")
+    doc_id = str(doc.id)
+
+    await login(client, "meera@lilkis.in")
+
+    # Into a folder she cannot write to: refused.
+    blocked = await client.patch(
+        f"/deals/{deal.id}/documents/{doc_id}/move", json={"folder_id": str(legal.id)}
+    )
+    assert blocked.status_code == 403, blocked.text
+
+    # Between two she can write to: allowed.
+    ok = await client.patch(
+        f"/deals/{deal.id}/documents/{doc_id}/move", json={"folder_id": str(misc.id)}
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["folder_id"] == str(misc.id)
+
+    # And the source check, which the target case above does not reach:
+    # Rohan can write to misc but only read bank, so he cannot take a
+    # document out of bank even though he could put one into misc.
+    rohan = await create_user(db, "rohan@lilkis.in")
+    await grant_access(db, rohan.id, bank.id, "view", admin.id)
+    await grant_access(db, rohan.id, misc.id, "contribute", admin.id)
+    second = await _seed_document(db, deal, bank, admin, "another.pdf", "application/pdf")
+
+    await login(client, "rohan@lilkis.in")
+    out_of_bank = await client.patch(
+        f"/deals/{deal.id}/documents/{second.id}/move", json={"folder_id": str(misc.id)}
+    )
+    assert out_of_bank.status_code == 403, out_of_bank.text
+
+
+async def test_move_refuses_a_folder_from_another_deal(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    """A subfolder belongs to one deal. Moving this deal's document into
+    another deal's subfolder would file it somewhere nobody looking at
+    either deal can find it."""
+    admin = await create_user(db, "admin@lilkis.in", role="admin")
+    sharma = await create_deal(db, "SHRM", admin.id)
+    patel = await create_deal(db, "PTXL", admin.id)
+    minutes = await create_folder(db, "Minutes of the meeting", admin.id)
+
+    await login(client, "admin@lilkis.in")
+    other = await client.post(
+        f"/deals/{patel.id}/folders", json={"name": "March 2026", "parent_id": str(minutes.id)}
+    )
+    assert other.status_code == 201, other.text
+
+    doc = await _seed_document(db, sharma, minutes, admin, "notes.pdf", "application/pdf")
+    resp = await client.patch(
+        f"/deals/{sharma.id}/documents/{doc.id}/move",
+        json={"folder_id": other.json()["id"]},
+    )
+    assert resp.status_code == 404, resp.text
