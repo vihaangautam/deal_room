@@ -24,6 +24,9 @@ services:
       POSTGRES_USER: lilkis_admin
       POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?set POSTGRES_ADMIN_PASSWORD}
       POSTGRES_DB: lilkis
+      # Read by db-init/01-app-role.sh when the volume is first
+      # created, so the role is made with the password the API uses.
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD}
     volumes:
       - pg_data:/var/lib/postgresql/data
       # Creates the restricted lilkis_app role on first init. The Alembic

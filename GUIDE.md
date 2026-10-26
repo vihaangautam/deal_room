@@ -408,15 +408,14 @@ python3 -c "import secrets; print(secrets.token_urlsafe(32))"   # run three time
   `https://deals.lilkis.in`
 - `CLOUDFLARE_TUNNEL_TOKEN` — Phase 6, come back for it
 
-**One trap:** `POSTGRES_APP_PASSWORD` must also be written into
-`db-init/01-app-role.sql`. That script runs **once**, when the database
-volume is first created. If the two disagree, the API cannot connect, and
-changing `.env` afterwards will not fix it — the role already exists with
-the old password.
+`POSTGRES_APP_PASSWORD` is read by `db-init/01-app-role.sh` when the
+database volume is first created, so there is nothing to keep in step by
+hand — it used to be written into a `.sql` file as well, which meant two
+places that could disagree and a tracked file holding the real password.
 
-```bash
-nano db-init/01-app-role.sql   # put the same password in
-```
+> That script runs **once**, on first volume creation. If you change the
+> password in `.env` later, the role still has the old one: change it in
+> the database too, or destroy the volume.
 
 ### 5.2 Cloudflare tunnel
 

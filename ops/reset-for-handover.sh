@@ -46,9 +46,13 @@ command -v aws >/dev/null || fail "aws CLI missing. Run: sudo apt install -y aws
 
 # ── Show what is about to go ─────────────────────────────────────────
 PG="${COMPOSE} exec -T -e PGPASSWORD=${POSTGRES_ADMIN_PASSWORD} postgres psql -U lilkis_admin -d lilkis -tAc"
-DEALS=$(${PG} 'select count(*) from deals' 2>/dev/null || echo '?')
-DOCS=$(${PG} 'select count(*) from documents' 2>/dev/null || echo '?')
-USERS=$(${PG} 'select count(*) from users' 2>/dev/null || echo '?')
+# < /dev/null on each: ${PG} runs `docker compose exec -T`, which reads
+# stdin. Without it these three swallow the answers to the two prompts
+# below when the script is driven from a pipe, and the confirmation
+# silently never arrives.
+DEALS=$(${PG} 'select count(*) from deals' < /dev/null 2>/dev/null || echo '?')
+DOCS=$(${PG} 'select count(*) from documents' < /dev/null 2>/dev/null || echo '?')
+USERS=$(${PG} 'select count(*) from users' < /dev/null 2>/dev/null || echo '?')
 OBJECTS=$(aws s3 ls "s3://${OCI_BUCKET}/" --recursive --summarize 2>/dev/null \
     | awk '/Total Objects:/ {print $3}' || echo '?')
 
@@ -164,7 +168,12 @@ ${COMPOSE} exec -T api python -m alembic upgrade head >/dev/null || fail "alembi
 echo
 say "creating the owner account"
 echo
-${COMPOSE} exec api python -m app.bootstrap
+# -e passes the three LILKIS_BOOTSTRAP_* variables through if they are
+# set, so an unattended run works; no -T, so without them it still
+# prompts on the terminal. Adding -T forces the unattended path and takes
+# the interactive one away, which is how a handover password ended up
+# being set from inside a script.
+${COMPOSE} exec     -e LILKIS_BOOTSTRAP_NAME -e LILKIS_BOOTSTRAP_EMAIL -e LILKIS_BOOTSTRAP_PASSWORD     api python -m app.bootstrap
 
 echo
 say "done - clean room, one owner, nothing else"

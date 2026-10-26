@@ -19,6 +19,8 @@ services:
       POSTGRES_USER: lilkis_admin
       POSTGRES_PASSWORD: localdevpassword
       POSTGRES_DB: lilkis
+      # db-init/01-app-role.sh creates the restricted role with this.
+      POSTGRES_APP_PASSWORD: localdevpassword
     ports:
       # 5433, not 5432 — this machine already has a native Windows Postgres
       # service bound to 5432, which silently shadows Docker's forwarded
