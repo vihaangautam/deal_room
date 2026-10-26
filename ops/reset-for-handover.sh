@@ -103,48 +103,70 @@ say "taking a backup before touching anything"
 # deleting is the worst of the failure modes available here, so this is
 # done in Python against the parsed response, and verified afterwards.
 say "emptying s3://${OCI_BUCKET}"
-python3 - "${OCI_BUCKET}" <<'PY' || fail "could not empty the bucket"
-import json
-import subprocess
-import sys
+# Through the api container's boto3, not the AWS CLI, for two reasons
+# this bucket taught us the hard way:
+#
+#   * `aws s3api list-object-versions` is broken on this host — it exits
+#     0 and prints "badly formed help string" instead of JSON, while
+#     `aws s3 ls` works. A delete loop reading that gets nothing and
+#     concludes there is nothing to delete.
+#   * the first version asked for --query '{Objects: [].{...}}', which
+#     projects [] over the RESPONSE OBJECT rather than a list, and so
+#     matched nothing either.
+#
+# Both failed by finding no work and reporting success, over 204 live
+# objects. boto3 raises instead, and the check at the end means this can
+# only say the bucket is empty when it is.
+#
+# NOTE: needs s3:ListBucketVersions on the purge user. Without it this
+# falls back to deleting current objects only, which hides them but
+# leaves the prior versions and the storage they use.
+${COMPOSE} exec -T api python <<'PY' || fail "could not empty the bucket"
+from app.config import settings
+from app.storage import admin_client
 
-bucket = sys.argv[1]
-
-
-def aws(*args: str) -> dict:
-    out = subprocess.run(
-        ["aws", *args], capture_output=True, text=True, check=True
-    ).stdout.strip()
-    return json.loads(out) if out else {}
-
-
+bucket = settings.oci_bucket
 removed = 0
-while True:
-    page = aws("s3api", "list-object-versions", "--bucket", bucket, "--max-keys", "500")
-    # Both lists, because a delete marker is itself a version that has to
-    # go for the key to actually disappear.
-    doomed = [
-        {"Key": v["Key"], "VersionId": v["VersionId"]}
-        for key in ("Versions", "DeleteMarkers")
-        for v in page.get(key, [])
-    ]
-    if not doomed:
-        break
-    aws(
-        "s3api",
-        "delete-objects",
-        "--bucket",
-        bucket,
-        "--delete",
-        json.dumps({"Objects": doomed, "Quiet": True}),
-    )
-    removed += len(doomed)
-    print(f"  removed {removed} so far")
 
-left = aws("s3api", "list-object-versions", "--bucket", bucket, "--max-keys", "1")
-if left.get("Versions") or left.get("DeleteMarkers"):
-    raise SystemExit("bucket still has objects after the delete loop")
-print(f"  bucket empty, {removed} versions removed")
+try:
+    while True:
+        page = admin_client.list_object_versions(Bucket=bucket, MaxKeys=500)
+        # Delete markers too: a marker is itself a version, and the key
+        # does not go away until it does.
+        doomed = [
+            {"Key": v["Key"], "VersionId": v["VersionId"]}
+            for key in ("Versions", "DeleteMarkers")
+            for v in page.get(key, [])
+        ]
+        if not doomed:
+            break
+        admin_client.delete_objects(
+            Bucket=bucket, Delete={"Objects": doomed, "Quiet": True}
+        )
+        removed += len(doomed)
+        print(f"  removed {removed} versions so far")
+
+    left = admin_client.list_object_versions(Bucket=bucket, MaxKeys=1)
+    if left.get("Versions") or left.get("DeleteMarkers"):
+        raise SystemExit("bucket still has objects after the delete loop")
+    print(f"  bucket empty - {removed} versions removed")
+
+except admin_client.exceptions.ClientError as exc:
+    if "ListBucketVersions" not in str(exc):
+        raise
+    print("  no s3:ListBucketVersions on the purge user - current objects only")
+    while True:
+        page = admin_client.list_objects_v2(Bucket=bucket, MaxKeys=500)
+        keys = [{"Key": o["Key"]} for o in page.get("Contents", [])]
+        if not keys:
+            break
+        admin_client.delete_objects(
+            Bucket=bucket, Delete={"Objects": keys, "Quiet": True}
+        )
+        removed += len(keys)
+        print(f"  removed {removed} objects so far")
+    print(f"  {removed} objects removed; PRIOR VERSIONS REMAIN.")
+    print("  Add s3:ListBucketVersions to lilkis-purge to clear them.")
 PY
 
 # ── 3. Fresh database ────────────────────────────────────────────────
