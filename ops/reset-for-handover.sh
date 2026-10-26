@@ -86,21 +86,62 @@ say "taking a backup before touching anything"
 "${LILKIS_DIR}/ops/backup.sh" || fail "backup failed - refusing to destroy anything without one"
 
 # ── 2. Empty the bucket, versions and all ────────────────────────────
-# Versioning is on, so a plain delete leaves markers and every old
-# version behind. For test data that is just clutter you pay to store.
+# Versioning is on, so a plain delete leaves a marker and every old
+# version behind. For test data that is clutter you pay to store, and
+# the point of the reset is that none of it is there afterwards.
+#
+# The first version of this asked the AWS CLI for
+#   --query '{Objects: [].{Key:Key,VersionId:VersionId}}'
+# which projects [] over the RESPONSE OBJECT — whose keys are Versions,
+# DeleteMarkers, IsTruncated — not over a list. It matched nothing, the
+# loop broke on its first pass, and the script said "bucket empty" over
+# 204 surviving objects. A deletion that reports success without
+# deleting is the worst of the failure modes available here, so this is
+# done in Python against the parsed response, and verified afterwards.
 say "emptying s3://${OCI_BUCKET}"
-while :; do
-    BATCH=$(aws s3api list-object-versions --bucket "${OCI_BUCKET}" --max-keys 500 \
-        --query '{Objects: [].{Key:Key,VersionId:VersionId}}' --output json 2>/dev/null \
-        | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps(d) if d.get("Objects") else "")' || true)
-    [ -z "${BATCH}" ] && break
-    echo "${BATCH}" > /tmp/lilkis_delete_batch.json
-    aws s3api delete-objects --bucket "${OCI_BUCKET}" \
-        --delete "file:///tmp/lilkis_delete_batch.json" >/dev/null || fail "delete-objects"
-    say "  removed a batch"
-done
-rm -f /tmp/lilkis_delete_batch.json
-say "bucket empty"
+python3 - "${OCI_BUCKET}" <<'PY' || fail "could not empty the bucket"
+import json
+import subprocess
+import sys
+
+bucket = sys.argv[1]
+
+
+def aws(*args: str) -> dict:
+    out = subprocess.run(
+        ["aws", *args], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    return json.loads(out) if out else {}
+
+
+removed = 0
+while True:
+    page = aws("s3api", "list-object-versions", "--bucket", bucket, "--max-keys", "500")
+    # Both lists, because a delete marker is itself a version that has to
+    # go for the key to actually disappear.
+    doomed = [
+        {"Key": v["Key"], "VersionId": v["VersionId"]}
+        for key in ("Versions", "DeleteMarkers")
+        for v in page.get(key, [])
+    ]
+    if not doomed:
+        break
+    aws(
+        "s3api",
+        "delete-objects",
+        "--bucket",
+        bucket,
+        "--delete",
+        json.dumps({"Objects": doomed, "Quiet": True}),
+    )
+    removed += len(doomed)
+    print(f"  removed {removed} so far")
+
+left = aws("s3api", "list-object-versions", "--bucket", bucket, "--max-keys", "1")
+if left.get("Versions") or left.get("DeleteMarkers"):
+    raise SystemExit("bucket still has objects after the delete loop")
+print(f"  bucket empty, {removed} versions removed")
+PY
 
 # ── 3. Fresh database ────────────────────────────────────────────────
 # down -v drops the named volume, which is the only way to be sure
